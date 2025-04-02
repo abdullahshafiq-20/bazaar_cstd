@@ -13,10 +13,9 @@ authRouter.get('/auth/profile', verifyToken, getProfile);
 
 // Admin-only routes
 authRouter.post('/admin/register', verifyToken, requireAdmin, registerAdmin);
-// Temporary route for initial admin setup - REMOVE AFTER FIRST ADMIN IS CREATED
+
 // authRouter.post('/admin/initial-setup', registerAdmin);
 
-// Normal admin registration (protected)
-// authRouter.post('/admin/register', verifyToken, requireAdmin, registerAdmin);
+
 
 export default authRouter;

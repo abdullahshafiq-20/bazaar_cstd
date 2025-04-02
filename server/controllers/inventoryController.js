@@ -1,291 +1,471 @@
 import pool from '../config/pool.js';
 
-/**
- * Get overall inventory status with optional filtering
- * Returns a summary of current inventory for all products or filtered subset
- * 
- */
+
 export const getCurrentInventory = async (req, res) => {
-    try {
-        const { category, minStock, maxStock, lowStock, outOfStock } = req.query;
-        
-        let queryConditions = [];
-        let values = [];
-        let paramIndex = 1;
-        
-        // Base query using the current_inventory view
-        let queryText = `
-            SELECT 
-                ci.product_id,
-                ci.name,
-                ci.sku,
-                ci.category,
-                ci.current_quantity,
-                p.unit_price,
-                (ci.current_quantity * p.unit_price) AS inventory_value
-            FROM 
-                current_inventory ci
-            JOIN
-                products p ON ci.product_id = p.product_id
-        `;
-        
-        // Add filters if provided
-        if (category) {
-            queryConditions.push(`ci.category = $${paramIndex}`);
-            values.push(category);
-            paramIndex++;
-        }
-        
-        if (minStock !== undefined) {
-            queryConditions.push(`ci.current_quantity >= $${paramIndex}`);
-            values.push(parseInt(minStock));
-            paramIndex++;
-        }
-        
-        if (maxStock !== undefined) {
-            queryConditions.push(`ci.current_quantity <= $${paramIndex}`);
-            values.push(parseInt(maxStock));
-            paramIndex++;
-        }
-        
-        // Special filter for low stock items (less than specified amount)
-        if (lowStock === 'true') {
-            const threshold = req.query.threshold || 10; // Default threshold of 10
-            queryConditions.push(`ci.current_quantity > 0 AND ci.current_quantity <= $${paramIndex}`);
-            values.push(parseInt(threshold));
-            paramIndex++;
-        }
-        
-        // Special filter for out of stock items
-        if (outOfStock === 'true') {
-            queryConditions.push(`ci.current_quantity <= 0`);
-        }
-        
-        // Add WHERE clause if we have conditions
-        if (queryConditions.length > 0) {
-            queryText += ` WHERE ${queryConditions.join(' AND ')}`;
-        }
-        
-        // Add sorting - first by category, then by name
-        queryText += ` ORDER BY ci.category, ci.name`;
-        
-        const result = await pool.query(queryText, values);
-        
-        // Calculate total inventory value
-        const totalValue = result.rows.reduce((sum, item) => sum + parseFloat(item.inventory_value || 0), 0);
-        
-        // Generate inventory summary
-        const summary = {
-            total_products: result.rows.length,
-            total_inventory_value: totalValue.toFixed(2),
-            out_of_stock_count: result.rows.filter(item => item.current_quantity <= 0).length,
-            categories: [...new Set(result.rows.map(item => item.category))],
-            products: result.rows
-        };
-        
-        res.json(summary);
-    } catch (error) {
-        console.error('Error fetching inventory:', error);
-        res.status(500).json({ error: 'Internal server error' });
+  try {
+    const storeId = parseInt(req.params.id);
+    
+    // Get all products with inventory levels for this store
+    const query = `
+      SELECT 
+        p.product_id, 
+        p.name, 
+        p.sku, 
+        p.category, 
+        p.unit_price,
+        COALESCE(SUM(CASE 
+          WHEN sm.movement_type = 'STOCK_IN' THEN sm.quantity 
+          WHEN sm.movement_type = 'SALE' THEN -sm.quantity
+          WHEN sm.movement_type = 'MANUAL_REMOVAL' THEN -sm.quantity 
+          ELSE 0
+        END), 0) AS current_quantity
+      FROM products p
+      LEFT JOIN stock_movements sm ON p.product_id = sm.product_id AND sm.store_id = $1
+      GROUP BY p.product_id, p.name, p.sku, p.category, p.unit_price
+      HAVING COALESCE(SUM(CASE 
+        WHEN sm.movement_type = 'STOCK_IN' THEN sm.quantity 
+        WHEN sm.movement_type = 'SALE' THEN -sm.quantity
+        WHEN sm.movement_type = 'MANUAL_REMOVAL' THEN -sm.quantity 
+        ELSE 0
+      END), 0) > 0
+      ORDER BY p.name
+    `;
+    
+    const result = await pool.query(query, [storeId]);
+    
+    res.status(200).json({
+      success: true,
+      count: result.rows.length,
+      data: result.rows
+    });
+  } catch (error) {
+    console.error('Error getting inventory:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+
+export const addProductToInventory = async (req, res) => {
+  try {
+    const storeId = parseInt(req.params.id);
+    const { productId, quantity, unitPrice, notes } = req.body;
+    
+    // Validate input
+    if (!productId || !quantity || quantity <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Product ID and quantity (> 0) are required'
+      });
     }
+    
+    // Begin transaction
+    const client = await pool.connect();
+    
+    try {
+      await client.query('BEGIN');
+      
+      // Check if the product exists
+      const productCheck = await client.query(
+        'SELECT * FROM products WHERE product_id = $1',
+        [productId]
+      );
+      
+      if (productCheck.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({
+          success: false,
+          message: 'Product not found'
+        });
+      }
+      
+      const product = productCheck.rows[0];
+      
+      // Add stock movement
+      const stockPrice = unitPrice || product.unit_price;
+      const stockNotes = notes || 'Initial inventory';
+      
+      const movementQuery = `
+        INSERT INTO stock_movements 
+        (product_id, store_id, movement_type, quantity, unit_price, notes)
+        VALUES ($1, $2, 'STOCK_IN', $3, $4, $5)
+        RETURNING *
+      `;
+      
+      const movementResult = await client.query(
+        movementQuery,
+        [productId, storeId, quantity, stockPrice, stockNotes]
+      );
+      
+      // Get updated inventory
+      const inventoryQuery = `
+        SELECT COALESCE(SUM(CASE 
+          WHEN movement_type = 'STOCK_IN' THEN quantity 
+          WHEN movement_type IN ('SALE', 'MANUAL_REMOVAL') THEN -quantity
+          ELSE 0
+        END), 0) AS current_quantity
+        FROM stock_movements
+        WHERE product_id = $1 AND store_id = $2
+      `;
+      
+      const inventoryResult = await client.query(
+        inventoryQuery,
+        [productId, storeId]
+      );
+      
+      await client.query('COMMIT');
+      
+      res.status(201).json({
+        success: true,
+        message: 'Product added to inventory',
+        data: {
+          product: {
+            id: product.product_id,
+            name: product.name,
+            sku: product.sku,
+            category: product.category,
+            unit_price: product.unit_price
+          },
+          quantity_added: quantity,
+          current_quantity: parseInt(inventoryResult.rows[0].current_quantity),
+          movement: movementResult.rows[0]
+        }
+      });
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error('Error adding product to inventory:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
 };
 
 /**
- * Get detailed inventory for a specific product
- * Returns current quantity, recent movements, and value
- * 
+ * Get inventory for a specific product in a store
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
  */
 export const getProductInventory = async (req, res) => {
-    try {
-        const { id } = req.params;
-        
-        if (!id) {
-            return res.status(400).json({ error: 'Product ID is required' });
-        }
-        
-        // Get product details and current quantity
-        const productQuery = `
-            SELECT 
-                ci.product_id,
-                ci.name,
-                ci.sku,
-                ci.category,
-                ci.current_quantity,
-                p.unit_price,
-                p.description,
-                (ci.current_quantity * p.unit_price) AS inventory_value
-            FROM 
-                current_inventory ci
-            JOIN
-                products p ON ci.product_id = p.product_id
-            WHERE
-                ci.product_id = $1
-        `;
-        
-        const productResult = await pool.query(productQuery, [id]);
-        
-        if (productResult.rows.length === 0) {
-            return res.status(404).json({ error: 'Product not found' });
-        }
-        
-        // Get recent stock movements for this product
-        const movementsQuery = `
-            SELECT
-                movement_id,
-                movement_type,
-                quantity,
-                unit_price,
-                notes,
-                created_at
-            FROM
-                stock_movements
-            WHERE
-                product_id = $1
-            ORDER BY
-                created_at DESC
-            LIMIT 10
-        `;
-        
-        const movementsResult = await pool.query(movementsQuery, [id]);
-        
-        // Calculate some statistics
-        const totalIn = movementsResult.rows
-            .filter(m => m.movement_type === 'STOCK_IN')
-            .reduce((sum, m) => sum + parseInt(m.quantity), 0);
-            
-        const totalOut = movementsResult.rows
-            .filter(m => m.movement_type !== 'STOCK_IN')
-            .reduce((sum, m) => sum + parseInt(m.quantity), 0);
-        
-        // Prepare response
-        const productInventory = {
-            product: productResult.rows[0],
-            inventory_status: {
-                current_quantity: productResult.rows[0].current_quantity,
-                inventory_value: productResult.rows[0].inventory_value,
-                is_in_stock: productResult.rows[0].current_quantity > 0
-            },
-            movement_summary: {
-                total_in: totalIn,
-                total_out: totalOut,
-                net_change: totalIn - totalOut
-            },
-            recent_movements: movementsResult.rows
-        };
-        
-        res.json(productInventory);
-    } catch (error) {
-        console.error('Error fetching product inventory:', error);
-        res.status(500).json({ error: 'Internal server error' });
+  try {
+    const storeId = parseInt(req.params.id);
+    const productId = parseInt(req.params.productId);
+    
+    // Get product details
+    const productQuery = `
+      SELECT product_id, name, description, sku, category, unit_price
+      FROM products WHERE product_id = $1
+    `;
+    
+    const productResult = await pool.query(productQuery, [productId]);
+    
+    if (productResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Product not found'
+      });
     }
+    
+    // Get inventory transactions
+    const movementsQuery = `
+      SELECT 
+        movement_id, 
+        movement_type, 
+        quantity, 
+        unit_price, 
+        notes, 
+        created_at
+      FROM stock_movements
+      WHERE product_id = $1 AND store_id = $2
+      ORDER BY created_at DESC
+    `;
+    
+    const movementsResult = await pool.query(movementsQuery, [productId, storeId]);
+    
+    // Calculate current quantity
+    const quantityQuery = `
+      SELECT COALESCE(SUM(CASE 
+        WHEN movement_type = 'STOCK_IN' THEN quantity 
+        WHEN movement_type IN ('SALE', 'MANUAL_REMOVAL') THEN -quantity
+        ELSE 0
+      END), 0) AS current_quantity
+      FROM stock_movements
+      WHERE product_id = $1 AND store_id = $2
+    `;
+    
+    const quantityResult = await pool.query(quantityQuery, [productId, storeId]);
+    
+    res.status(200).json({
+      success: true,
+      data: {
+        product: productResult.rows[0],
+        current_quantity: parseInt(quantityResult.rows[0].current_quantity),
+        movements: movementsResult.rows
+      }
+    });
+  } catch (error) {
+    console.error('Error getting product inventory:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
 };
 
 /**
- * Get inventory alerts (low stock, out of stock)
- * 
+ * Remove product from inventory
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ */
+export const removeFromInventory = async (req, res) => {
+  try {
+    const storeId = parseInt(req.params.id);
+    const { productId, quantity, reason } = req.body;
+    
+    // Validate input
+    if (!productId || !quantity || quantity <= 0 || !reason) {
+      return res.status(400).json({
+        success: false,
+        message: 'Product ID, quantity (> 0), and reason are required'
+      });
+    }
+    
+    // Begin transaction
+    const client = await pool.connect();
+    
+    try {
+      await client.query('BEGIN');
+      
+      // Check current inventory
+      const inventoryQuery = `
+        SELECT COALESCE(SUM(CASE 
+          WHEN movement_type = 'STOCK_IN' THEN quantity 
+          WHEN movement_type IN ('SALE', 'MANUAL_REMOVAL') THEN -quantity
+          ELSE 0
+        END), 0) AS current_quantity
+        FROM stock_movements
+        WHERE product_id = $1 AND store_id = $2
+      `;
+      
+      const inventoryResult = await client.query(
+        inventoryQuery,
+        [productId, storeId]
+      );
+      
+      const currentQuantity = parseInt(inventoryResult.rows[0].current_quantity);
+      
+      // Check if enough inventory
+      if (currentQuantity < quantity) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({
+          success: false,
+          message: `Insufficient inventory. Current quantity: ${currentQuantity}`
+        });
+      }
+      
+      // Add removal movement
+      const movementQuery = `
+        INSERT INTO stock_movements 
+        (product_id, store_id, movement_type, quantity, notes)
+        VALUES ($1, $2, 'MANUAL_REMOVAL', $3, $4)
+        RETURNING *
+      `;
+      
+      const movementResult = await client.query(
+        movementQuery,
+        [productId, storeId, quantity, reason]
+      );
+      
+      // Get updated inventory
+      const updatedInventoryResult = await client.query(
+        inventoryQuery,
+        [productId, storeId]
+      );
+      
+      await client.query('COMMIT');
+      
+      res.status(200).json({
+        success: true,
+        message: 'Product removed from inventory',
+        data: {
+          previous_quantity: currentQuantity,
+          quantity_removed: quantity,
+          current_quantity: parseInt(updatedInventoryResult.rows[0].current_quantity),
+          movement: movementResult.rows[0]
+        }
+      });
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error('Error removing from inventory:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+/**
+ * Get inventory alerts for low stock or out of stock items
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
  */
 export const getInventoryAlerts = async (req, res) => {
-    try {
-        const threshold = req.query.threshold || 10; // Default threshold of 10
-        
-        const alertsQuery = `
-            SELECT 
-                ci.product_id,
-                ci.name,
-                ci.sku,
-                ci.category,
-                ci.current_quantity,
-                p.unit_price,
-                CASE 
-                    WHEN ci.current_quantity <= 0 THEN 'OUT_OF_STOCK'
-                    WHEN ci.current_quantity <= $1 THEN 'LOW_STOCK'
-                    ELSE 'NORMAL'
-                END AS status
-            FROM 
-                current_inventory ci
-            JOIN
-                products p ON ci.product_id = p.product_id
-            WHERE
-                ci.current_quantity <= $1
-            ORDER BY
-                ci.current_quantity ASC, ci.category, ci.name
-        `;
-        
-        const alertsResult = await pool.query(alertsQuery, [threshold]);
-        
-        // Group alerts by status
-        const outOfStock = alertsResult.rows.filter(item => item.status === 'OUT_OF_STOCK');
-        const lowStock = alertsResult.rows.filter(item => item.status === 'LOW_STOCK');
-        
-        // Prepare response
-        const alerts = {
-            threshold: parseInt(threshold),
-            total_alerts: alertsResult.rows.length,
-            out_of_stock_count: outOfStock.length,
-            low_stock_count: lowStock.length,
-            out_of_stock: outOfStock,
-            low_stock: lowStock
-        };
-        
-        res.json(alerts);
-    } catch (error) {
-        console.error('Error fetching inventory alerts:', error);
-        res.status(500).json({ error: 'Internal server error' });
-    }
+  try {
+    const storeId = parseInt(req.params.id);
+    const lowStockThreshold = parseInt(req.query.threshold || 10);
+    
+    // Get products with low or zero inventory
+    const query = `
+      SELECT 
+        p.product_id, 
+        p.name, 
+        p.sku, 
+        p.category, 
+        p.unit_price,
+        COALESCE(SUM(CASE 
+          WHEN sm.movement_type = 'STOCK_IN' THEN sm.quantity 
+          WHEN sm.movement_type IN ('SALE', 'MANUAL_REMOVAL') THEN -sm.quantity
+          ELSE 0
+        END), 0) AS current_quantity,
+        CASE 
+          WHEN COALESCE(SUM(CASE 
+            WHEN sm.movement_type = 'STOCK_IN' THEN sm.quantity 
+            WHEN sm.movement_type IN ('SALE', 'MANUAL_REMOVAL') THEN -sm.quantity
+            ELSE 0
+          END), 0) = 0 THEN 'OUT_OF_STOCK'
+          WHEN COALESCE(SUM(CASE 
+            WHEN sm.movement_type = 'STOCK_IN' THEN sm.quantity 
+            WHEN sm.movement_type IN ('SALE', 'MANUAL_REMOVAL') THEN -sm.quantity
+            ELSE 0
+          END), 0) <= $2 THEN 'LOW_STOCK'
+          ELSE 'OK'
+        END AS status
+      FROM products p
+      LEFT JOIN stock_movements sm ON p.product_id = sm.product_id AND sm.store_id = $1
+      GROUP BY p.product_id, p.name, p.sku, p.category, p.unit_price
+      HAVING COALESCE(SUM(CASE 
+        WHEN sm.movement_type = 'STOCK_IN' THEN sm.quantity 
+        WHEN sm.movement_type IN ('SALE', 'MANUAL_REMOVAL') THEN -sm.quantity
+        ELSE 0
+      END), 0) <= $2
+      ORDER BY current_quantity ASC, p.name
+    `;
+    
+    const result = await pool.query(query, [storeId, lowStockThreshold]);
+    
+    res.status(200).json({
+      success: true,
+      count: result.rows.length,
+      low_stock_threshold: lowStockThreshold,
+      data: result.rows
+    });
+  } catch (error) {
+    console.error('Error getting inventory alerts:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
 };
 
 /**
- * Get inventory value report
- * 
- * @param {Object} req - Request object with optional category parameter
- * @param {Object} res - Response object
+ * Get the total value of inventory in a store
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
  */
 export const getInventoryValue = async (req, res) => {
-    try {
-        const { category } = req.query;
-        
-        let queryText = `
-            SELECT 
-                ci.category,
-                SUM(ci.current_quantity) AS total_quantity,
-                SUM(ci.current_quantity * p.unit_price) AS total_value,
-                COUNT(ci.product_id) AS product_count
-            FROM 
-                current_inventory ci
-            JOIN
-                products p ON ci.product_id = p.product_id
-        `;
-        
-        const values = [];
-        
-        // Add category filter if provided
-        if (category) {
-            queryText += ` WHERE ci.category = $1`;
-            values.push(category);
-        }
-        
-        queryText += `
-            GROUP BY 
-                ci.category
-            ORDER BY 
-                total_value DESC
-        `;
-        
-        const result = await pool.query(queryText, values);
-        
-        // Calculate grand total
-        const grandTotal = result.rows.reduce((sum, item) => sum + parseFloat(item.total_value || 0), 0);
-        
-        // Prepare response
-        const inventoryValue = {
-            total_inventory_value: grandTotal.toFixed(2),
-            category_count: result.rows.length,
-            category_breakdown: result.rows
-        };
-        
-        res.json(inventoryValue);
-    } catch (error) {
-        console.error('Error fetching inventory value:', error);
-        res.status(500).json({ error: 'Internal server error' });
-    }
+  try {
+    const storeId = parseInt(req.params.id);
+    
+    // Calculate inventory value
+    const query = `
+      SELECT 
+        p.category,
+        COUNT(DISTINCT p.product_id) AS product_count,
+        SUM(
+          COALESCE(
+            (SELECT SUM(CASE 
+              WHEN movement_type = 'STOCK_IN' THEN quantity 
+              WHEN movement_type IN ('SALE', 'MANUAL_REMOVAL') THEN -quantity
+              ELSE 0
+            END) 
+            FROM stock_movements 
+            WHERE product_id = p.product_id AND store_id = $1),
+            0
+          ) * p.unit_price
+        ) AS inventory_value
+      FROM 
+        products p
+      WHERE 
+        EXISTS (
+          SELECT 1 FROM stock_movements 
+          WHERE product_id = p.product_id 
+          AND store_id = $1 
+          GROUP BY product_id 
+          HAVING SUM(CASE 
+            WHEN movement_type = 'STOCK_IN' THEN quantity 
+            WHEN movement_type IN ('SALE', 'MANUAL_REMOVAL') THEN -quantity
+            ELSE 0
+          END) > 0
+        )
+      GROUP BY p.category
+      ORDER BY inventory_value DESC
+    `;
+    
+    const categoryValues = await pool.query(query, [storeId]);
+    
+    // Get total value
+    const totalQuery = `
+      SELECT 
+        SUM(
+          COALESCE(
+            (SELECT SUM(CASE 
+              WHEN movement_type = 'STOCK_IN' THEN quantity 
+              WHEN movement_type IN ('SALE', 'MANUAL_REMOVAL') THEN -quantity
+              ELSE 0
+            END) 
+            FROM stock_movements 
+            WHERE product_id = p.product_id AND store_id = $1),
+            0
+          ) * p.unit_price
+        ) AS total_value,
+        COUNT(DISTINCT p.product_id) AS total_products,
+        SUM(
+          COALESCE(
+            (SELECT SUM(CASE 
+              WHEN movement_type = 'STOCK_IN' THEN quantity 
+              WHEN movement_type IN ('SALE', 'MANUAL_REMOVAL') THEN -quantity
+              ELSE 0
+            END) 
+            FROM stock_movements 
+            WHERE product_id = p.product_id AND store_id = $1),
+            0
+          )
+        ) AS total_items
+      FROM 
+        products p
+      WHERE 
+        EXISTS (
+          SELECT 1 FROM stock_movements 
+          WHERE product_id = p.product_id 
+          AND store_id = $1 
+          GROUP BY product_id 
+          HAVING SUM(CASE 
+            WHEN movement_type = 'STOCK_IN' THEN quantity 
+            WHEN movement_type IN ('SALE', 'MANUAL_REMOVAL') THEN -quantity
+            ELSE 0
+          END) > 0
+        )
+    `;
+    
+    const totalValue = await pool.query(totalQuery, [storeId]);
+    
+    res.status(200).json({
+      success: true,
+      data: {
+        total: totalValue.rows[0],
+        by_category: categoryValues.rows
+      }
+    });
+  } catch (error) {
+    console.error('Error calculating inventory value:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
 };

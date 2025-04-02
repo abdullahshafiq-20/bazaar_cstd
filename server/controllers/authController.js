@@ -123,6 +123,7 @@ export const login = async (req, res) => {
     if (!username || !password) {
       return res.status(400).json({ success: false, message: 'Username and password are required' });
     }
+    
 
     // Find user
     const result = await pool.query(
@@ -147,7 +148,7 @@ export const login = async (req, res) => {
       return res.status(401).json({ success: false, message: 'Invalid credentials' });
     }
 
-    // Get user roles
+    // Get user roles with store_id
     const rolesResult = await pool.query(
       'SELECT role, store_id FROM user_roles WHERE user_id = $1',
       [user.user_id]
@@ -155,11 +156,8 @@ export const login = async (req, res) => {
 
     const roles = rolesResult.rows.map(row => ({
       role: row.role,
-      storeId: row.store_id
+      storeId: row.store_id // Make sure store_id is included here
     }));
-
-    // Determine if user is an admin
-    const isAdmin = roles.some(r => r.role === 'ADMIN');
 
     // Generate JWT token
     const token = jwt.sign(
@@ -167,8 +165,8 @@ export const login = async (req, res) => {
         id: user.user_id,
         username: user.username,
         email: user.email,
-        roles,
-        isAdmin
+        roles, // This includes the role and storeId
+        isAdmin: roles.some(r => r.role === 'ADMIN')
       },
       JWT_SECRET,
       { expiresIn: JWT_EXPIRES_IN }
@@ -184,7 +182,7 @@ export const login = async (req, res) => {
         email: user.email,
         fullName: user.full_name,
         roles,
-        isAdmin
+        isAdmin: roles.some(r => r.role === 'ADMIN')
       }
     });
   } catch (error) {
@@ -198,6 +196,7 @@ export const getProfile = async (req, res) => {
   try {
     // User ID is extracted from JWT token by auth middleware
     const userId = req.user.id;
+    const token = req.headers.authorization.split(' ')[1];
     
     const result = await pool.query(
       'SELECT user_id, username, email, full_name, created_at FROM users WHERE user_id = $1',

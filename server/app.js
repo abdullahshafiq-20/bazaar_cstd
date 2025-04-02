@@ -5,6 +5,8 @@ import productRouter from "./routes/productRoutes.js";
 import stockRouter from "./routes/stockRoutes.js";
 import inventoryRouter from "./routes/inventoryRoutes.js";
 import authRouter from "./routes/authRoutes.js";
+import storeRouter from "./routes/storeRoutes.js";
+import adminRouter from "./routes/adminRoutes.js";
 import cors from "cors";
 dotenv.config();
 
@@ -43,6 +45,8 @@ app.use("/api", productRouter);
 app.use("/api", stockRouter);
 app.use("/api", inventoryRouter);
 app.use("/api", authRouter);
+app.use("/api", storeRouter);
+app.use("/api", adminRouter);
 
 
 

@@ -1,15 +1,25 @@
-// In your routes file:
-import { getCurrentInventory, getProductInventory, getInventoryAlerts, getInventoryValue } from '../controllers/inventoryController.js';
-
 import express from "express";
+import { 
+  getCurrentInventory, 
+  getProductInventory, 
+  addProductToInventory,
+  removeFromInventory,
+  getInventoryAlerts,
+  getInventoryValue
+} from '../controllers/inventoryController.js';
+import { verifyToken, requireStoreManager } from '../middleware/authMiddleware.js';
+
 const inventoryRouter = express.Router();
 
-// Define your routes here
+// Apply authentication to all routes
+inventoryRouter.use(verifyToken);
 
-inventoryRouter.get('/inventory', getCurrentInventory);
-inventoryRouter.get('/inventory/product/:id', getProductInventory);
-inventoryRouter.get('/inventory/alerts', getInventoryAlerts);
-inventoryRouter.get('/inventory/value', getInventoryValue);
-
+// Store inventory routes - all require store manager permission
+inventoryRouter.get('/stores/:id/inventory', requireStoreManager, getCurrentInventory);
+inventoryRouter.get('/stores/:id/inventory/product/:productId', requireStoreManager, getProductInventory);
+inventoryRouter.post('/stores/:id/inventory/add', requireStoreManager, addProductToInventory);
+inventoryRouter.post('/stores/:id/inventory/remove', requireStoreManager, removeFromInventory);
+inventoryRouter.get('/stores/:id/inventory/alerts', requireStoreManager, getInventoryAlerts);
+inventoryRouter.get('/stores/:id/inventory/value', requireStoreManager, getInventoryValue);
 
 export default inventoryRouter;
