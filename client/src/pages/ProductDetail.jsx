@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import api from '../services/api';
@@ -18,6 +17,14 @@ const ProductDetail = () => {
     notes: ''
   });
   const [deleteConfirmation, setDeleteConfirmation] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editFormData, setEditFormData] = useState({
+    name: '',
+    sku: '',
+    category: '',
+    unit_price: 0,
+    description: ''
+  });
 
   useEffect(() => {
     const fetchProductData = async () => {
@@ -54,11 +61,31 @@ const ProductDetail = () => {
     fetchProductData();
   }, [id]);
 
+  useEffect(() => {
+    if (product) {
+      setEditFormData({
+        name: product.name || '',
+        sku: product.sku || '',
+        category: product.category || '',
+        unit_price: product.unit_price || 0,
+        description: product.description || ''
+      });
+    }
+  }, [product]);
+
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setStockFormData({
       ...stockFormData,
       [name]: name === 'quantity' || name === 'unit_price' ? parseFloat(value) : value
+    });
+  };
+
+  const handleEditInputChange = (e) => {
+    const { name, value } = e.target;
+    setEditFormData({
+      ...editFormData,
+      [name]: name === 'unit_price' ? parseFloat(value) : value
     });
   };
 
@@ -113,6 +140,23 @@ const ProductDetail = () => {
     } catch (err) {
       console.error('Error recording sale:', err);
       alert('Failed to record sale. Please try again.');
+    }
+  };
+
+  const handleEdit = async (e) => {
+    e.preventDefault();
+    try {
+      await api.put(`/product/update/${id}`, editFormData);
+      
+      // Refresh product data
+      const productResponse = await api.get(`/product/get_by_id/${id}`);
+      setProduct(productResponse.data);
+      
+      // Close modal
+      setShowEditModal(false);
+    } catch (err) {
+      console.error('Error updating product:', err);
+      alert('Failed to update product. Please try again.');
     }
   };
 
@@ -192,15 +236,15 @@ const ProductDetail = () => {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white p-6 rounded-lg shadow">
         <h1 className="text-2xl font-bold text-gray-800">{product.name}</h1>
         <div className="flex space-x-2 mt-4 sm:mt-0">
-          <Link 
-            to={`/products/edit/${id}`}
+          <button 
+            onClick={() => setShowEditModal(true)}
             className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
           >
             <svg className="mr-2 -ml-1 w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
             </svg>
             Edit
-          </Link>
+          </button>
           <button 
             onClick={() => setDeleteConfirmation(true)}
             className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700"
@@ -504,6 +548,114 @@ const ProductDetail = () => {
                     </div>
                   </form>
                 </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Product Modal */}
+      {showEditModal && (
+        <div className="fixed inset-0 overflow-y-auto z-50">
+          <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+            <div className="fixed inset-0 transition-opacity" aria-hidden="true">
+              <div className="absolute inset-0 bg-gray-500 opacity-75"></div>
+            </div>
+            <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+              <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                <h3 className="text-lg leading-6 font-medium text-gray-900 mb-4">Edit Product</h3>
+                <form onSubmit={handleEdit}>
+                  <div className="grid grid-cols-1 gap-4">
+                    <div>
+                      <label htmlFor="name" className="block text-sm font-medium text-gray-700">Product Name</label>
+                      <input
+                        type="text"
+                        id="name"
+                        name="name"
+                        value={editFormData.name}
+                        onChange={handleEditInputChange}
+                        className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                        required
+                      />
+                    </div>
+                    
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label htmlFor="sku" className="block text-sm font-medium text-gray-700">SKU</label>
+                        <input
+                          type="text"
+                          id="sku"
+                          name="sku"
+                          value={editFormData.sku}
+                          onChange={handleEditInputChange}
+                          className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                          required
+                        />
+                      </div>
+                      
+                      <div>
+                        <label htmlFor="category" className="block text-sm font-medium text-gray-700">Category</label>
+                        <input
+                          type="text"
+                          id="category"
+                          name="category"
+                          value={editFormData.category}
+                          onChange={handleEditInputChange}
+                          className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                        />
+                      </div>
+                    </div>
+                    
+                    <div>
+                      <label htmlFor="unit_price" className="block text-sm font-medium text-gray-700">Unit Price</label>
+                      <div className="mt-1 relative rounded-md shadow-sm">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                          <span className="text-gray-500 sm:text-sm">$</span>
+                        </div>
+                        <input
+                          type="number"
+                          id="unit_price"
+                          name="unit_price"
+                          step="0.01"
+                          min="0"
+                          value={editFormData.unit_price}
+                          onChange={handleEditInputChange}
+                          className="focus:ring-indigo-500 focus:border-indigo-500 block w-full pl-7 pr-12 sm:text-sm border-gray-300 rounded-md py-2"
+                          required
+                        />
+                      </div>
+                    </div>
+                    
+                    <div>
+                      <label htmlFor="description" className="block text-sm font-medium text-gray-700">Description</label>
+                      <textarea
+                        id="description"
+                        name="description"
+                        rows="4"
+                        value={editFormData.description}
+                        onChange={handleEditInputChange}
+                        className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                      ></textarea>
+                    </div>
+                  </div>
+                  
+                  <div className="mt-5 sm:mt-6 sm:grid sm:grid-cols-2 sm:gap-3 sm:grid-flow-row-dense">
+                    <button
+                      type="submit"
+                      className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-indigo-600 text-base font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:col-start-2 sm:text-sm"
+                    >
+                      Save Changes
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowEditModal(false)}
+                      className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:col-start-1 sm:text-sm"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </form>
               </div>
             </div>
           </div>
