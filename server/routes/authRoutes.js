@@ -14,7 +14,7 @@ authRouter.get('/auth/profile', verifyToken, getProfile);
 // Admin-only routes
 authRouter.post('/admin/register', verifyToken, requireAdmin, registerAdmin);
 
-// authRouter.post('/admin/initial-setup', registerAdmin);
+authRouter.post('/admin/initial-setup', registerAdmin);
 
 
 

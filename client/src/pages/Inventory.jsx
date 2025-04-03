@@ -42,9 +42,15 @@ function Inventory() {
       
       // Transform the data to match our expected structure
       const transformedData = {
-        products: response.data.data, // Use the 'data' array as our products
+        products: response.data.data.map(item => ({
+          ...item,
+          current_quantity: item.current_stock // Map current_stock to current_quantity
+        })),
         total_products: response.data.count || response.data.data.length,
-        total_inventory_value: calculateTotalValue(response.data.data)
+        total_inventory_value: calculateTotalValue(response.data.data.map(item => ({
+          ...item,
+          current_quantity: item.current_stock
+        })))
       };
       
       setInventory(transformedData);
@@ -65,7 +71,7 @@ function Inventory() {
   const calculateTotalValue = (products) => {
     return products.reduce((total, product) => {
       const price = parseFloat(product.unit_price) || 0;
-      const quantity = parseInt(product.current_quantity) || 0;
+      const quantity = parseInt(product.current_stock) || 0; // Changed from current_quantity
       return total + (price * quantity);
     }, 0).toFixed(2);
   };

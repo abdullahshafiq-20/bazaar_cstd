@@ -140,10 +140,11 @@ const handleAddStock = async (e) => {
         return;
       }
       
-      await api.post(`/stores/${currentStoreId}/inventory/remove`, {
-        productId: id,
+      await api.post(`/stores/${currentStoreId}/stock/sale`, {
+        product_id: id,
         quantity: stockFormData.quantity,
-        reason : stockFormData.notes,
+        unit_price: stockFormData.unit_price,
+        notes : stockFormData.notes,
       });
       
       // Refresh data

@@ -19,10 +19,10 @@ const stockRouter = express.Router();
 stockRouter.use(verifyToken);
 
 // Store-specific routes accessible to authorized users
-stockRouter.post('/stores/:id/stock', addStock);
-stockRouter.post('/stores/:id/sales', recordSale);
-stockRouter.post('/stores/:id/removals', manualRemoval);
-stockRouter.get('/stores/:id/stock-movements', getStoreStockMovements);
+stockRouter.post('/stores/:id/stock/add', addStock);
+stockRouter.post('/stores/:id/stock/sale', recordSale);
+stockRouter.post('/stores/:id/stock/remove', manualRemoval);
+stockRouter.get('/stores/:id/stock/movements', getStoreStockMovements);
 stockRouter.get('/stores/:id/inventory', getStoreInventory);
 stockRouter.get('/stores/:id/inventory-value', getStoreInventoryValue);
 
