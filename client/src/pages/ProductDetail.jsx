@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import api from '../services/api';
+import { useStore } from '../context/StoreContext'; // Add this import
 
 const ProductDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { currentStoreId } = useStore(); // Get current store ID from context
   const [product, setProduct] = useState(null);
   const [inventory, setInventory] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -29,6 +31,12 @@ const ProductDetail = () => {
   useEffect(() => {
     const fetchProductData = async () => {
       try {
+        if (!currentStoreId) {
+          setError('No store selected');
+          setLoading(false);
+          return;
+        }
+        
         setLoading(true);
         
         // Fetch product details
@@ -36,10 +44,23 @@ const ProductDetail = () => {
         console.log('Product Response:', productResponse.data);
         setProduct(productResponse.data);
         
-        // Fetch inventory details
-        const inventoryResponse = await api.get(`/inventory/product/${id}`);
-        setInventory(inventoryResponse.data);
+        // Fetch inventory details using store ID
+        const inventoryResponse = await api.get(`/stores/${currentStoreId}/inventory/product/${id}`);
         console.log('Inventory Response:', inventoryResponse.data);
+        
+        // Transform the inventory data to match expected structure
+        if (inventoryResponse.data && inventoryResponse.data.success) {
+          const formattedInventory = {
+            inventory_status: {
+              current_quantity: inventoryResponse.data.data.current_quantity || 0,
+              inventory_value: (inventoryResponse.data.data.current_quantity * productResponse.data.unit_price).toFixed(2),
+              is_in_stock: inventoryResponse.data.data.current_quantity > 0
+            },
+            recent_movements: inventoryResponse.data.data.movements || []
+          };
+          
+          setInventory(formattedInventory);
+        }
         
         // Initialize stock form with product price
         if (productResponse.data.unit_price) {
@@ -57,84 +78,96 @@ const ProductDetail = () => {
         setLoading(false);
       }
     };
-
-    fetchProductData();
-  }, [id]);
-
-  useEffect(() => {
-    if (product) {
-      setEditFormData({
-        name: product.name || '',
-        sku: product.sku || '',
-        category: product.category || '',
-        unit_price: product.unit_price || 0,
-        description: product.description || ''
-      });
+  
+    if (currentStoreId) {
+      fetchProductData();
     }
-  }, [product]);
+  }, [id, currentStoreId]);
 
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
+  // Update handleAddStock to use currentStoreId
+// Update handleAddStock to use the correct field names
+const handleAddStock = async (e) => {
+  e.preventDefault();
+  try {
+    if (!currentStoreId) {
+      alert('No store selected');
+      return;
+    }
+    
+    // Change the field names to match what the API expects
+    await api.post(`/stores/${currentStoreId}/inventory/add`, {
+      productId: id, // Changed from product_id to productId
+      quantity: stockFormData.quantity,
+      unitPrice: stockFormData.unit_price, // Changed from unit_price to unitPrice
+      notes: stockFormData.notes
+    });
+    
+    // Refresh data
+    const inventoryResponse = await api.get(`/stores/${currentStoreId}/inventory/product/${id}`);
+    
+    // Transform the inventory data
+    if (inventoryResponse.data && inventoryResponse.data.success) {
+      const formattedInventory = {
+        inventory_status: {
+          current_quantity: inventoryResponse.data.data.current_quantity || 0,
+          inventory_value: (inventoryResponse.data.data.current_quantity * product.unit_price).toFixed(2),
+          is_in_stock: inventoryResponse.data.data.current_quantity > 0
+        },
+        recent_movements: inventoryResponse.data.data.movements || []
+      };
+      
+      setInventory(formattedInventory);
+    }
+    
+    // Reset form and close modal
     setStockFormData({
-      ...stockFormData,
-      [name]: name === 'quantity' || name === 'unit_price' ? parseFloat(value) : value
+      quantity: 1,
+      unit_price: product.unit_price,
+      notes: ''
     });
-  };
-
-  const handleEditInputChange = (e) => {
-    const { name, value } = e.target;
-    setEditFormData({
-      ...editFormData,
-      [name]: name === 'unit_price' ? parseFloat(value) : value
-    });
-  };
-
-  const handleAddStock = async (e) => {
-    e.preventDefault();
-    try {
-      await api.post('/stock/add', {
-        product_id: id,
-        quantity: stockFormData.quantity,
-        unit_price: stockFormData.unit_price,
-        notes: stockFormData.notes
-      });
-      
-      // Refresh data
-      const inventoryResponse = await api.get(`/inventory/product/${id}`);
-      setInventory(inventoryResponse.data);
-      
-      // Reset form and close modal
-      setStockFormData({
-        quantity: 1,
-        unit_price: product.unit_price,
-        notes: ''
-      });
-      setShowAddStockModal(false);
-    } catch (err) {
-      console.error('Error adding stock:', err);
-      alert('Failed to add stock. Please try again.');
-    }
-  };
-
+    setShowAddStockModal(false);
+  } catch (err) {
+    console.error('Error adding stock:', err);
+    alert('Failed to add stock. Please try again.');
+  }
+};
+  // Update handleRecordSale to use currentStoreId
   const handleRecordSale = async (e) => {
     e.preventDefault();
     try {
-      await api.post('/stock/sale', {
-        product_id: id,
+      if (!currentStoreId) {
+        alert('No store selected');
+        return;
+      }
+      
+      await api.post(`/stores/${currentStoreId}/inventory/remove`, {
+        productId: id,
         quantity: stockFormData.quantity,
-        unit_price: stockFormData.unit_price,
-        notes: stockFormData.notes
+        reason : stockFormData.notes,
       });
       
       // Refresh data
-      const inventoryResponse = await api.get(`/inventory/product/${id}`);
-      setInventory(inventoryResponse.data);
+      const inventoryResponse = await api.get(`/stores/${currentStoreId}/inventory/product/${id}`);
+      
+      // Transform the inventory data
+      if (inventoryResponse.data && inventoryResponse.data.success) {
+        const formattedInventory = {
+          inventory_status: {
+            current_quantity: inventoryResponse.data.data.current_quantity || 0,
+            inventory_value: (inventoryResponse.data.data.current_quantity * product.unitPrice).toFixed(2),
+            is_in_stock: inventoryResponse.data.data.current_quantity > 0
+          },
+          recent_movements: inventoryResponse.data.data.movements || []
+        };
+        
+        setInventory(formattedInventory);
+      }
       
       // Reset form and close modal
       setStockFormData({
         quantity: 1,
-        unit_price: product.unit_price,
-        notes: ''
+        unitPrice: product.unit_price,
+        reason: ''
       });
       setShowSaleModal(false);
     } catch (err) {
@@ -168,6 +201,24 @@ const ProductDetail = () => {
       console.error('Error deleting product:', err);
       alert('Failed to delete product. Please try again.');
     }
+  };
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setStockFormData(prev => ({
+      ...prev,
+      [name]: name === 'quantity' ? parseInt(value) : 
+              name === 'unit_price' ? parseFloat(value) : 
+              value
+    }));
+  };
+  
+  // Add this function to handle input changes in the edit form
+  const handleEditInputChange = (e) => {
+    const { name, value } = e.target;
+    setEditFormData(prev => ({
+      ...prev,
+      [name]: name === 'unit_price' ? parseFloat(value) : value
+    }));
   };
 
   if (loading) {
@@ -235,7 +286,7 @@ const ProductDetail = () => {
       {/* Product Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white p-6 rounded-lg shadow">
         <h1 className="text-2xl font-bold text-gray-800">{product.name}</h1>
-        <div className="flex space-x-2 mt-4 sm:mt-0">
+        {/* <div className="flex space-x-2 mt-4 sm:mt-0">
           <button 
             onClick={() => setShowEditModal(true)}
             className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
@@ -254,7 +305,7 @@ const ProductDetail = () => {
             </svg>
             Delete
           </button>
-        </div>
+        </div> */}
       </div>
 
       {/* Product Details and Inventory Summary */}

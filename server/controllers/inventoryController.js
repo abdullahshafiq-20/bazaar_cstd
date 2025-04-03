@@ -314,7 +314,7 @@ export const getInventoryAlerts = async (req, res) => {
     const storeId = parseInt(req.params.id);
     const lowStockThreshold = parseInt(req.query.threshold || 10);
     
-    // Get products with low or zero inventory
+    // Get products with low inventory that have been added to the inventory
     const query = `
       SELECT 
         p.product_id, 
@@ -341,6 +341,11 @@ export const getInventoryAlerts = async (req, res) => {
           ELSE 'OK'
         END AS status
       FROM products p
+      INNER JOIN (
+        SELECT DISTINCT product_id
+        FROM stock_movements
+        WHERE store_id = $1 AND movement_type = 'STOCK_IN'
+      ) AS added_products ON p.product_id = added_products.product_id
       LEFT JOIN stock_movements sm ON p.product_id = sm.product_id AND sm.store_id = $1
       GROUP BY p.product_id, p.name, p.sku, p.category, p.unit_price
       HAVING COALESCE(SUM(CASE 

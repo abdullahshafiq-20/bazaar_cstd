@@ -4,7 +4,8 @@ import {
   removeStoreAssignment,
   getAllStoreManagers,
   getManagerStores,
-  getUnassignedStores
+  getUnassignedStores,
+  getAllAssignedStores
 } from '../controllers/adminController.js';
 import { verifyToken, requireAdmin } from '../middleware/authMiddleware.js';
 
@@ -23,5 +24,6 @@ adminRouter.get('/admin/managers/:userId/stores', getManagerStores);
 
 // Store information routes
 adminRouter.get('/admin/stores/unassigned', getUnassignedStores);
+adminRouter.get('/admin/stores/assigned', getAllAssignedStores);
 
 export default adminRouter;

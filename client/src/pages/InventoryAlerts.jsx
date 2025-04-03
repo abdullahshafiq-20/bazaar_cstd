@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import api from '../services/api';
+import { useStore } from '../context/StoreContext'; 
 
 const InventoryAlerts = () => {
+  const { currentStoreId, loading: storeLoading, error: storeError } = useStore(); // Get the current store ID from context
   const [alerts, setAlerts] = useState({
     threshold: 10,
     total_alerts: 0,
@@ -15,15 +17,42 @@ const InventoryAlerts = () => {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    fetchAlerts();
-  }, [threshold]);
+    if (currentStoreId) {
+      fetchAlerts();
+    }
+  }, [threshold, currentStoreId]);
 
   const fetchAlerts = async () => {
+    if (!currentStoreId) {
+      setError('No store selected');
+      setLoading(false);
+      return;
+    }
+  
     try {
       setLoading(true);
-      const response = await api.get(`/inventory/alerts?threshold=${threshold}`);
-      setAlerts(response.data);
-      setError(null);
+      // Update to use the currentStoreId in the URL
+      const response = await api.get(`/stores/${currentStoreId}/inventory/alerts?threshold=${threshold}`);
+      
+      // Transform the response to match the expected format
+      if (response.data && response.data.success) {
+        const outOfStockItems = response.data.data.filter(item => item.status === 'OUT_OF_STOCK');
+        const lowStockItems = response.data.data.filter(item => item.status === 'LOW_STOCK');
+        
+        const alertData = {
+          threshold: response.data.low_stock_threshold || threshold,
+          total_alerts: response.data.count || 0,
+          out_of_stock_count: outOfStockItems.length,
+          low_stock_count: lowStockItems.length,
+          out_of_stock: outOfStockItems,
+          low_stock: lowStockItems
+        };
+        
+        setAlerts(alertData);
+        setError(null);
+      } else {
+        throw new Error('Invalid response format');
+      }
     } catch (err) {
       setError('Failed to fetch inventory alerts');
       console.error('Error fetching alerts:', err);
@@ -106,7 +135,7 @@ const InventoryAlerts = () => {
                 Products that need immediate replenishment
               </p>
             </div>
-            {alerts.out_of_stock.length === 0 ? (
+            {!alerts.out_of_stock || alerts.out_of_stock.length === 0 ? (
               <div className="px-4 py-5 text-center text-sm text-gray-500">
                 No out of stock products
               </div>
@@ -178,7 +207,7 @@ const InventoryAlerts = () => {
                 Products below the threshold of {alerts.threshold} units
               </p>
             </div>
-            {alerts.low_stock.length === 0 ? (
+            {!alerts.low_stock || alerts.low_stock.length === 0 ? (
               <div className="px-4 py-5 text-center text-sm text-gray-500">
                 No low stock products
               </div>

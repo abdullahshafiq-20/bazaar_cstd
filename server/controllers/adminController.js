@@ -302,3 +302,29 @@ export const getUnassignedStores = async (req, res) => {
     });
   }
 };
+
+export const getAllAssignedStores = async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT s.store_id, s.name, s.address, s.phone, s.email, s.is_active
+       FROM stores s
+       WHERE s.is_active = true AND EXISTS (
+         SELECT 1 FROM user_roles ur 
+         WHERE ur.store_id = s.store_id AND ur.role = 'STORE_MANAGER'
+       )
+       ORDER BY s.name`
+    );
+    res.status(200).json({
+      success: true,
+      count: result.rows.length,
+      data: result.rows
+    });
+  } catch (error) {
+    console.error('Error getting unassigned stores:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+};  
+
