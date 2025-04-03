@@ -6,9 +6,11 @@ import {
   updateStore, 
   deleteStore, 
   toggleStoreStatus,
-  getStoreManagers
+  getStoreManagers,
+  getAllStoresFullDetails
 } from '../controllers/storeController.js';
 import { verifyToken, requireAdmin } from '../middleware/authMiddleware.js';
+import dateRangeFilter from '../middlewares/dateRangeFilter.js';
 
 const storeRouter = express.Router();
 
@@ -27,5 +29,6 @@ storeRouter.put('/stores/:id', requireAdmin, updateStore);
 storeRouter.delete('/stores/:id', requireAdmin, deleteStore);
 storeRouter.patch('/stores/:id/status', requireAdmin, toggleStoreStatus);
 storeRouter.get('/stores/:id/managers', requireAdmin, getStoreManagers);
+storeRouter.get('/stores/reports/all', requireAdmin, dateRangeFilter, getAllStoresFullDetails);
 
 export default storeRouter;

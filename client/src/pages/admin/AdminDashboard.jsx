@@ -53,6 +53,18 @@ const AdminDashboard = () => {
   });
   const [managerActionLoading, setManagerActionLoading] = useState(false);
 
+  // Add these new state variables for store analytics
+  const [storeAnalytics, setStoreAnalytics] = useState(null);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  const [dateRange, setDateRange] = useState({
+    startDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // Default to last 30 days
+    endDate: new Date().toISOString().split('T')[0] // Today
+  });
+
+  // Add these new state variables for stock analytics
+  const [stockAnalytics, setStockAnalytics] = useState(null);
+  const [stockAnalyticsLoading, setStockAnalyticsLoading] = useState(false);
+
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -432,6 +444,50 @@ const AdminDashboard = () => {
     }
   };
 
+  // Add this new function to fetch store analytics data
+  const fetchStoreAnalytics = async () => {
+    try {
+      setAnalyticsLoading(true);
+      setError(null);
+      
+      const { startDate, endDate } = dateRange;
+      const response = await api.get(`/stores/reports/all?startDate=${startDate}&endDate=${endDate}`);
+      
+      setStoreAnalytics(response.data);
+      setAnalyticsLoading(false);
+    } catch (err) {
+      console.error('Error fetching store analytics:', err);
+      setError('Failed to fetch store analytics. Please try again.');
+      setAnalyticsLoading(false);
+    }
+  };
+
+  // Add this new function to fetch stock analytics data
+  const fetchStockAnalytics = async () => {
+    try {
+      setStockAnalyticsLoading(true);
+      setError(null);
+      
+      const { startDate, endDate } = dateRange;
+      const response = await api.get(`/reports/system-stock?startDate=${startDate}&endDate=${endDate}`);
+      
+      setStockAnalytics(response.data);
+      setStockAnalyticsLoading(false);
+    } catch (err) {
+      console.error('Error fetching stock analytics:', err);
+      setError('Failed to fetch stock analytics. Please try again.');
+      setStockAnalyticsLoading(false);
+    }
+  };
+
+  // Handle date range changes
+  const handleDateRangeChange = (e) => {
+    setDateRange({
+      ...dateRange,
+      [e.target.name]: e.target.value
+    });
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -501,6 +557,34 @@ const AdminDashboard = () => {
             }`}
           >
             Store Assignments
+          </button>
+          {/* Add new Analytics tab */}
+          <button
+            onClick={() => {
+              setActiveTab('analytics');
+              fetchStoreAnalytics(); // Fetch data when tab is selected
+            }}
+            className={`py-2 px-1 border-b-2 font-medium text-sm ${
+              activeTab === 'analytics'
+                ? 'border-indigo-500 text-indigo-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            Store Analytics
+          </button>
+          {/* Add new Stock Report tab */}
+          <button
+            onClick={() => {
+              setActiveTab('stock-report');
+              fetchStockAnalytics(); // Fetch data when tab is selected
+            }}
+            className={`py-2 px-1 border-b-2 font-medium text-sm ${
+              activeTab === 'stock-report'
+                ? 'border-indigo-500 text-indigo-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            Stock Report
           </button>
         </nav>
       </div>
@@ -927,6 +1011,625 @@ const AdminDashboard = () => {
               </tbody>
             </table>
           </div>
+        </div>
+      )}
+      
+      {/* Add this new tab content section for Store Analytics */}
+      {activeTab === 'analytics' && (
+        <div className="mb-8">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-semibold">Store Analytics</h2>
+            
+            <div className="flex space-x-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Start Date
+                </label>
+                <input
+                  type="date"
+                  name="startDate"
+                  value={dateRange.startDate}
+                  onChange={handleDateRangeChange}
+                  className="px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  End Date
+                </label>
+                <input
+                  type="date"
+                  name="endDate"
+                  value={dateRange.endDate}
+                  onChange={handleDateRangeChange}
+                  className="px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                />
+              </div>
+              <div className="self-end">
+                <button
+                  onClick={fetchStoreAnalytics}
+                  disabled={analyticsLoading}
+                  className="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700 disabled:opacity-50"
+                >
+                  {analyticsLoading ? 'Loading...' : 'Apply Filters'}
+                </button>
+              </div>
+            </div>
+          </div>
+          
+          {analyticsLoading ? (
+            <div className="flex justify-center items-center h-64">
+              <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500"></div>
+            </div>
+          ) : storeAnalytics ? (
+            <div>
+              <div className="bg-white p-4 rounded-lg shadow mb-6">
+                <h3 className="text-lg font-medium mb-2">Summary</h3>
+                <div className="text-sm text-gray-600 mb-4">
+                  Date Range: {storeAnalytics.dateRange.startDate} to {storeAnalytics.dateRange.endDate}
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                    <div className="text-sm text-gray-500">Total Stores</div>
+                    <div className="text-2xl font-semibold">{storeAnalytics.storesCount}</div>
+                  </div>
+                  <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                    <div className="text-sm text-gray-500">Total Inventory Value</div>
+                    <div className="text-2xl font-semibold">
+                      ${storeAnalytics.stores.reduce((sum, store) => sum + parseFloat(store.inventoryValue), 0).toFixed(2)}
+                    </div>
+                  </div>
+                  <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                    <div className="text-sm text-gray-500">Total Sales</div>
+                    <div className="text-2xl font-semibold">
+                      ${storeAnalytics.stores.reduce((sum, store) => sum + parseFloat(store.salesData.totalSales), 0).toFixed(2)}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="bg-white shadow-md rounded-lg overflow-hidden mb-8">
+                <h3 className="text-lg font-medium p-4 bg-gray-50 border-b">Store Performance</h3>
+                
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Store
+                        </th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Contact Information
+                        </th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Inventory
+                        </th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Sales
+                        </th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Management
+                        </th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Actions
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {storeAnalytics.stores.map((store) => (
+                        <tr key={store.id} className="hover:bg-gray-50">
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center">
+                              <div className="flex-shrink-0 h-10 w-10 bg-indigo-100 rounded-full flex items-center justify-center">
+                                <span className="text-indigo-600 font-semibold">{store.name.charAt(0)}</span>
+                              </div>
+                              <div className="ml-4">
+                                <div className="text-sm font-medium text-gray-900">{store.name}</div>
+                                <div className="text-sm text-gray-500">{store.address}</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm text-gray-900">{store.phone}</div>
+                            <div className="text-sm text-gray-500">{store.email}</div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm font-medium text-gray-900">${store.inventoryValue}</div>
+                            <div className="text-sm text-gray-500">
+                              {store.productCount} Products
+                              {store.lowStockCount > 0 && (
+                                <span className="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                  {store.lowStockCount} Low Stock
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm font-medium text-gray-900">${store.salesData.totalSales}</div>
+                            <div className="text-sm text-gray-500">{store.salesData.transactionCount} Transactions</div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {store.managerCount > 0 ? (
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                {store.managerCount} {store.managerCount === 1 ? 'Manager' : 'Managers'}
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                                No Managers
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                            <button 
+                              className="text-indigo-600 hover:text-indigo-900 mr-3"
+                              onClick={() => {
+                                window.location.href = `/admin/store/${store.id}`;
+                              }}
+                            >
+                              View Details
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                <div className="bg-white shadow-md rounded-lg overflow-hidden">
+                  <h3 className="text-lg font-medium p-4 bg-gray-50 border-b">Inventory Value</h3>
+                  <div className="p-4">
+                    <div className="space-y-4">
+                      {storeAnalytics.stores.map((store) => (
+                        <div key={`inv-${store.id}`} className="flex items-center">
+                          <div className="w-40 truncate">{store.name}</div>
+                          <div className="flex-1 ml-4">
+                            <div className="h-4 bg-gray-200 rounded-full overflow-hidden">
+                              <div 
+                                className="h-full bg-indigo-600" 
+                                style={{ 
+                                  width: `${Math.min(100, (parseFloat(store.inventoryValue) / 3000) * 100)}%` 
+                                }}
+                              ></div>
+                            </div>
+                          </div>
+                          <div className="w-24 text-right">${store.inventoryValue}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="bg-white shadow-md rounded-lg overflow-hidden">
+                  <h3 className="text-lg font-medium p-4 bg-gray-50 border-b">Sales Performance</h3>
+                  <div className="p-4">
+                    <div className="space-y-4">
+                      {storeAnalytics.stores.map((store) => (
+                        <div key={`sales-${store.id}`} className="flex items-center">
+                          <div className="w-40 truncate">{store.name}</div>
+                          <div className="flex-1 ml-4">
+                            <div className="h-4 bg-gray-200 rounded-full overflow-hidden">
+                              <div 
+                                className="h-full bg-green-600" 
+                                style={{ 
+                                  width: `${Math.min(100, (parseFloat(store.salesData.totalSales) / 100) * 100)}%` 
+                                }}
+                              ></div>
+                            </div>
+                          </div>
+                          <div className="w-24 text-right">${store.salesData.totalSales}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {storeAnalytics.stores.map((store) => (
+                  <div key={`card-${store.id}`} className="bg-white shadow-md rounded-lg overflow-hidden">
+                    <div className="p-4 border-b">
+                      <h3 className="font-medium">{store.name}</h3>
+                      <p className="text-sm text-gray-500">{store.address}</p>
+                    </div>
+                    <div className="p-4 space-y-2">
+                      <div className="flex justify-between">
+                        <span className="text-sm text-gray-500">Inventory Value:</span>
+                        <span className="font-medium">${store.inventoryValue}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-sm text-gray-500">Products:</span>
+                        <span className="font-medium">{store.productCount}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-sm text-gray-500">Sales:</span>
+                        <span className="font-medium">${store.salesData.totalSales}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-sm text-gray-500">Transactions:</span>
+                        <span className="font-medium">{store.salesData.transactionCount}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-sm text-gray-500">Low Stock Items:</span>
+                        <span className={`font-medium ${store.lowStockCount > 0 ? 'text-red-600' : ''}`}>
+                          {store.lowStockCount}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="bg-gray-50 p-4 border-t">
+                      <button 
+                        className="w-full text-center text-indigo-600 hover:text-indigo-900"
+                        onClick={() => {
+                          window.location.href = `/admin/store/${store.id}`;
+                        }}
+                      >
+                        View Details
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="bg-gray-50 p-8 text-center rounded-lg border border-gray-200">
+              <p className="text-gray-600">
+                No data available. Please apply date filters and click "Apply Filters" to view store analytics.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+      
+      {/* Add this new tab content section for Stock Report */}
+      {activeTab === 'stock-report' && (
+        <div className="mb-8">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-semibold">System Stock Report</h2>
+            
+            <div className="flex space-x-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Start Date
+                </label>
+                <input
+                  type="date"
+                  name="startDate"
+                  value={dateRange.startDate}
+                  onChange={handleDateRangeChange}
+                  className="px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  End Date
+                </label>
+                <input
+                  type="date"
+                  name="endDate"
+                  value={dateRange.endDate}
+                  onChange={handleDateRangeChange}
+                  className="px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                />
+              </div>
+              <div className="self-end">
+                <button
+                  onClick={fetchStockAnalytics}
+                  disabled={stockAnalyticsLoading}
+                  className="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700 disabled:opacity-50"
+                >
+                  {stockAnalyticsLoading ? 'Loading...' : 'Apply Filters'}
+                </button>
+              </div>
+            </div>
+          </div>
+          
+          {stockAnalyticsLoading ? (
+            <div className="flex justify-center items-center h-64">
+              <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500"></div>
+            </div>
+          ) : stockAnalytics ? (
+            <div>
+              {/* System Summary */}
+              <div className="bg-white p-4 rounded-lg shadow mb-6">
+                <h3 className="text-lg font-medium mb-2">System Summary</h3>
+                <div className="text-sm text-gray-600 mb-4">
+                  Date Range: {stockAnalytics.dateRange.startDate} to {stockAnalytics.dateRange.endDate}
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                    <div className="text-sm text-gray-500">Active Stores</div>
+                    <div className="text-2xl font-semibold">{stockAnalytics.systemSummary.activeStores}</div>
+                  </div>
+                  <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                    <div className="text-sm text-gray-500">Total Products</div>
+                    <div className="text-2xl font-semibold">{stockAnalytics.systemSummary.totalProducts}</div>
+                  </div>
+                  <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                    <div className="text-sm text-gray-500">Total Inventory Value</div>
+                    <div className="text-2xl font-semibold">${stockAnalytics.systemSummary.totalInventoryValue}</div>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Store Inventory Summary */}
+              <div className="bg-white shadow-md rounded-lg overflow-hidden mb-6">
+                <h3 className="text-lg font-medium p-4 bg-gray-50 border-b">Store Inventory Summary</h3>
+                
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Store
+                        </th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Products
+                        </th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Inventory Value
+                        </th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Sales
+                        </th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Stock Status
+                        </th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Actions
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {stockAnalytics.stores.map((store) => (
+                        <tr key={store.id} className="hover:bg-gray-50">
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center">
+                              <div className="flex-shrink-0 h-10 w-10 bg-indigo-100 rounded-full flex items-center justify-center">
+                                <span className="text-indigo-600 font-semibold">{store.name.charAt(0)}</span>
+                              </div>
+                              <div className="ml-4">
+                                <div className="text-sm font-medium text-gray-900">{store.name}</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm font-medium text-gray-900">{store.productCount}</div>
+                            <div className="text-xs text-gray-500">Unique Products</div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm font-medium text-gray-900">${store.inventoryValue}</div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm font-medium text-gray-900">
+                              ${store.salesSummary.salesValue}
+                            </div>
+                            <div className="text-xs text-gray-500">
+                              {store.salesSummary.transactionCount} transactions
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            {store.lowStockItems.length > 0 ? (
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                {store.lowStockItems.length} Low Stock Items
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                Stock Healthy
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                            <button 
+                              className="text-indigo-600 hover:text-indigo-900"
+                              onClick={() => {
+                                // Toggle expanded view for this store
+                                const expandedStores = {...expandedStoreDetails};
+                                expandedStores[store.id] = !expandedStores[store.id];
+                                setExpandedStoreDetails(expandedStores);
+                              }}
+                            >
+                              View Details
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              
+              {/* Low Stock Alerts */}
+              <div className="bg-white shadow-md rounded-lg overflow-hidden mb-6">
+                <h3 className="text-lg font-medium p-4 bg-gray-50 border-b">Low Stock Alerts</h3>
+                
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Store
+                        </th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Product
+                        </th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Category
+                        </th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          SKU
+                        </th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Current Quantity
+                        </th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Actions
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {stockAnalytics.stores.flatMap(store => 
+                        store.lowStockItems.map(item => (
+                          <tr key={`${store.id}-${item.productId}`} className="hover:bg-gray-50">
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="text-sm font-medium text-gray-900">{store.name}</div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="text-sm font-medium text-gray-900">{item.name}</div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="text-sm text-gray-500">{item.category}</div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="text-sm text-gray-500">{item.sku}</div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="text-sm font-medium text-red-600">{item.currentQuantity}</div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                              <button className="text-indigo-600 hover:text-indigo-900">
+                                Restock
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                      {stockAnalytics.stores.every(store => store.lowStockItems.length === 0) && (
+                        <tr>
+                          <td colSpan="6" className="px-6 py-4 text-center text-sm text-gray-500">
+                            No low stock items found
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              
+              {/* Complete Inventory Listing */}
+              <div className="bg-white shadow-md rounded-lg overflow-hidden mb-6">
+                <h3 className="text-lg font-medium p-4 bg-gray-50 border-b">Complete Inventory</h3>
+                
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Store
+                        </th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Product
+                        </th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Category
+                        </th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          SKU
+                        </th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Quantity
+                        </th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Unit Price
+                        </th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Total Value
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {stockAnalytics.inventory.map((item, index) => (
+                        <tr key={`${item.storeId}-${item.productId}-${index}`} className="hover:bg-gray-50">
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm font-medium text-gray-900">{item.storeName}</div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm font-medium text-gray-900">{item.productName}</div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm text-gray-500">{item.category}</div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm text-gray-500">{item.sku}</div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className={`text-sm font-medium ${item.quantity <= 10 ? 'text-red-600' : 'text-gray-900'}`}>
+                              {item.quantity}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm text-gray-900">${item.unitPrice}</div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm font-medium text-gray-900">${item.value}</div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              
+              {/* Stock Movement Summary */}
+              <div className="bg-white shadow-md rounded-lg overflow-hidden">
+                <h3 className="text-lg font-medium p-4 bg-gray-50 border-b">Stock Movement Summary</h3>
+                
+                <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {stockAnalytics.stores.map(store => (
+                    <div key={`movement-${store.id}`} className="border rounded-lg overflow-hidden">
+                      <div className="bg-gray-50 px-4 py-2 border-b">
+                        <h4 className="font-medium">{store.name}</h4>
+                      </div>
+                      <div className="p-4">
+                        {store.movementsSummary.length > 0 ? (
+                          <table className="min-w-full">
+                            <thead>
+                              <tr>
+                                <th className="text-left text-xs font-medium text-gray-500 uppercase pb-2">Type</th>
+                                <th className="text-left text-xs font-medium text-gray-500 uppercase pb-2">Count</th>
+                                <th className="text-left text-xs font-medium text-gray-500 uppercase pb-2">Quantity</th>
+                                <th className="text-left text-xs font-medium text-gray-500 uppercase pb-2">Value</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {store.movementsSummary.map((movement, idx) => (
+                                <tr key={idx}>
+                                  <td className="py-2">
+                                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                      movement.type === 'STOCK_IN' 
+                                        ? 'bg-green-100 text-green-800' 
+                                        : movement.type === 'SALE' 
+                                          ? 'bg-blue-100 text-blue-800'
+                                          : 'bg-red-100 text-red-800'
+                                    }`}>
+                                      {movement.type.replace('_', ' ')}
+                                    </span>
+                                  </td>
+                                  <td className="py-2">{movement.count}</td>
+                                  <td className="py-2">{movement.quantity}</td>
+                                  <td className="py-2">${movement.value}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        ) : (
+                          <div className="text-center text-gray-500 py-4">
+                            No stock movements recorded in this period
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="bg-gray-50 p-8 text-center rounded-lg border border-gray-200">
+              <p className="text-gray-600">
+                No data available. Please apply date filters and click "Apply Filters" to view stock report.
+              </p>
+            </div>
+          )}
         </div>
       )}
       

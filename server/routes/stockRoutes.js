@@ -3,27 +3,34 @@ import {
     addStock, 
     recordSale, 
     manualRemoval, 
-    getStoreStockMovements,
+    getStoreStockMovements, 
     getStoreInventory,
     getStoreInventoryValue,
-    transferStock
+    transferStock,
+    getStockReport,
+    getAllStoresStockReport
 } from '../controllers/stockController.js';
-import { verifyToken, requireStoreManager, requireAdmin } from '../middleware/authMiddleware.js';
+import { verifyToken, requireAdmin } from '../middleware/authMiddleware.js';
+import dateRangeFilter from '../middlewares/dateRangeFilter.js';
 
 const stockRouter = express.Router();
 
-// Apply authentication to all routes
+// Protected routes - require authentication
 stockRouter.use(verifyToken);
 
-// Store-specific stock management (requires store manager permission)
-stockRouter.post('/stores/:id/stock/add', requireStoreManager, addStock);
-stockRouter.post('/stores/:id/stock/sale', requireStoreManager, recordSale);
-stockRouter.post('/stores/:id/stock/remove', requireStoreManager, manualRemoval);
-stockRouter.get('/stores/:id/stock/movements', requireStoreManager, getStoreStockMovements);
-stockRouter.get('/stores/:id/stock/inventory', requireStoreManager, getStoreInventory);
-stockRouter.get('/stores/:id/stock/value', requireStoreManager, getStoreInventoryValue);
+// Store-specific routes accessible to authorized users
+stockRouter.post('/stores/:id/stock', addStock);
+stockRouter.post('/stores/:id/sales', recordSale);
+stockRouter.post('/stores/:id/removals', manualRemoval);
+stockRouter.get('/stores/:id/stock-movements', getStoreStockMovements);
+stockRouter.get('/stores/:id/inventory', getStoreInventory);
+stockRouter.get('/stores/:id/inventory-value', getStoreInventoryValue);
 
-// Stock transfer (requires admin permission)
-stockRouter.post('/stock/transfer', requireAdmin, transferStock);
+// Routes for transferring stock between stores
+stockRouter.post('/transfers', transferStock);
+
+// Admin-only routes with date range filtering
+stockRouter.get('/reports/stock', requireAdmin, dateRangeFilter, getStockReport);
+stockRouter.get('/reports/system-stock', requireAdmin, dateRangeFilter, getAllStoresStockReport);
 
 export default stockRouter;
