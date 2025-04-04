@@ -29,14 +29,13 @@ const options = {
 const swaggerSpec = swaggerJSDoc(options);
 
 export const setupSwagger = (app) => {
-  // Serve swagger docs
-  app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
-  
-  // Serve swagger specification
-  app.get('/api-docs.json', (req, res) => {
+    if (process.env.NODE_ENV !== 'production') {
+      app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+      console.log('Swagger UI available at: http://localhost:3000/api-docs');
+    }
+  };
+
+export default function handler(req, res) {
     res.setHeader('Content-Type', 'application/json');
-    res.send(swaggerSpec);
-  });
-  
-  console.log('Swagger docs available at /api-docs');
-};
+    res.status(200).json(swaggerSpec);
+  }
