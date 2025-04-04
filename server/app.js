@@ -4,12 +4,15 @@ import dotenv from "dotenv";
 import productRouter from "./routes/productRoutes.js";
 import stockRouter from "./routes/stockRoutes.js";
 import inventoryRouter from "./routes/inventoryRoutes.js";
+import { setupSwagger } from './config/swagger.js';
+
 import cors from "cors";
 dotenv.config();
 
 
 
 const app = express();
+setupSwagger(app);
 const PORT = process.env.PORT || 3000;
 app.use(cors({ 
     origin: [

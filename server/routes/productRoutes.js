@@ -3,6 +3,7 @@ import express from "express";
 
 
 const productRouter = express.Router();
+
 // Define your routes here
 productRouter.get("/product/get/", getProducts);
 productRouter.get("/product/get_by_id/:id", getProductById);

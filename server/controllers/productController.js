@@ -15,6 +15,81 @@ import pool from '../config/pool.js';
 // console.log(result.rows);
 // client.release();
 
+/**
+ * @swagger
+ * components:
+ *   schemas:
+ *     Product:
+ *       type: object
+ *       required:
+ *         - name
+ *         - unit_price
+ *       properties:
+ *         product_id:
+ *           type: integer
+ *           description: The auto-generated ID of the product
+ *         name:
+ *           type: string
+ *           description: The name of the product
+ *         description:
+ *           type: string
+ *           description: Detailed description of the product
+ *         sku:
+ *           type: string
+ *           description: Stock keeping unit, unique identifier
+ *         category:
+ *           type: string
+ *           description: Product category
+ *         unit_price:
+ *           type: number
+ *           format: float
+ *           description: Price per unit
+ *         created_at:
+ *           type: string
+ *           format: date-time
+ *           description: Date and time when the product was created
+ *         updated_at:
+ *           type: string
+ *           format: date-time
+ *           description: Date and time when the product was last updated
+ *       example:
+ *         product_id: 1
+ *         name: Wireless Headphones
+ *         description: Premium noise-cancelling wireless headphones with 30-hour battery life
+ *         sku: AUDIO-WH100
+ *         category: Electronics
+ *         unit_price: 149.99
+ *         created_at: 2023-01-01T00:00:00.000Z
+ *         updated_at: 2023-01-01T00:00:00.000Z
+ */
+
+/**
+ * @swagger
+ * tags:
+ *   name: Products
+ *   description: API for managing products
+ */
+
+/**
+ * @swagger
+ * /api/product/get:
+ *   get:
+ *     summary: Returns a list of all products
+ *     tags: [Products]
+ *     responses:
+ *       200:
+ *         description: List of products
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/Product'
+ *       404:
+ *         description: No products found
+ *       500:
+ *         description: Internal server error
+ */
 export const getProducts = async (req, res) => {
     try {
         const query = `
@@ -33,6 +108,33 @@ export const getProducts = async (req, res) => {
     }
 };
 
+/**
+ * @swagger
+ * /api/product/get_by_id/{id}:
+ *   get:
+ *     summary: Get a product by ID
+ *     tags: [Products]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         schema:
+ *           type: integer
+ *         required: true
+ *         description: Product ID
+ *     responses:
+ *       200:
+ *         description: Product details
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Product'
+ *       400:
+ *         description: Bad request - Product ID is required
+ *       404:
+ *         description: Product not found
+ *       500:
+ *         description: Internal server error
+ */
 export const getProductById = async (req, res) => {
     try {
         const id = req.params.id;
@@ -62,6 +164,48 @@ export const getProductById = async (req, res) => {
 };
 
 
+/**
+ * @swagger
+ * /api/product/create:
+ *   post:
+ *     summary: Create a new product
+ *     tags: [Products]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - name
+ *               - unit_price
+ *             properties:
+ *               name:
+ *                 type: string
+ *               description:
+ *                 type: string
+ *               sku:
+ *                 type: string
+ *               category:
+ *                 type: string
+ *               unit_price:
+ *                 type: number
+ *                 format: float
+ *     responses:
+ *       201:
+ *         description: Product created successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 productId:
+ *                   type: integer
+ *       500:
+ *         description: Internal server error
+ */
 export const createProduct = async (req, res) => {
     const { name, description, sku, category, unit_price } = req.body;
 
@@ -82,8 +226,27 @@ export const createProduct = async (req, res) => {
 
 };
 
-// ...existing code...
-
+/**
+ * @swagger
+ * /api/products/create_demo:
+ *   post:
+ *     summary: Create demo products
+ *     tags: [Products]
+ *     responses:
+ *       201:
+ *         description: Demo products created successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 count:
+ *                   type: integer
+ *       500:
+ *         description: Internal server error
+ */
 export const createDemoProducts = async (req, res) => {
     try {
         const demoProducts = [
@@ -154,7 +317,56 @@ export const createDemoProducts = async (req, res) => {
 };
 
 
-
+/**
+ * @swagger
+ * /api/product/update/{id}:
+ *   put:
+ *     summary: Update a product
+ *     tags: [Products]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         schema:
+ *           type: integer
+ *         required: true
+ *         description: Product ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               name:
+ *                 type: string
+ *               description:
+ *                 type: string
+ *               sku:
+ *                 type: string
+ *               category:
+ *                 type: string
+ *               unit_price:
+ *                 type: number
+ *                 format: float
+ *     responses:
+ *       200:
+ *         description: Product updated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 product:
+ *                   $ref: '#/components/schemas/Product'
+ *       400:
+ *         description: Bad request - Product ID is required or No fields to update provided
+ *       404:
+ *         description: Product not found
+ *       500:
+ *         description: Internal server error
+ */
 export const updateProduct = async (req, res) => {
     try {
         const id = req.params.id;
@@ -239,6 +451,38 @@ export const updateProduct = async (req, res) => {
     }
 };
 
+/**
+ * @swagger
+ * /api/product/delete/{id}:
+ *   delete:
+ *     summary: Delete a product
+ *     tags: [Products]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         schema:
+ *           type: integer
+ *         required: true
+ *         description: Product ID
+ *     responses:
+ *       200:
+ *         description: Product deleted successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 product:
+ *                   $ref: '#/components/schemas/Product'
+ *       400:
+ *         description: Bad request - Product ID is required
+ *       404:
+ *         description: Product not found
+ *       500:
+ *         description: Internal server error
+ */
 export const deleteProduct = async (req, res) => {
     try {
         const id = req.params.id;

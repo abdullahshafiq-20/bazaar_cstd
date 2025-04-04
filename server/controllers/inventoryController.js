@@ -1,9 +1,85 @@
 import pool from '../config/pool.js';
 
 /**
- * Get overall inventory status with optional filtering
- * Returns a summary of current inventory for all products or filtered subset
- * 
+ * @swagger
+ * /api/inventory:
+ *   get:
+ *     summary: Get current inventory
+ *     description: Returns a summary of current inventory for all products or filtered subset
+ *     tags: [Inventory]
+ *     parameters:
+ *       - in: query
+ *         name: category
+ *         schema:
+ *           type: string
+ *         description: Filter by product category
+ *       - in: query
+ *         name: minStock
+ *         schema:
+ *           type: integer
+ *         description: Minimum stock quantity filter
+ *       - in: query
+ *         name: maxStock
+ *         schema:
+ *           type: integer
+ *         description: Maximum stock quantity filter
+ *       - in: query
+ *         name: lowStock
+ *         schema:
+ *           type: string
+ *           enum: [true, false]
+ *         description: Filter for items with low stock levels
+ *       - in: query
+ *         name: threshold
+ *         schema:
+ *           type: integer
+ *           default: 10
+ *         description: Threshold for low stock (used with lowStock=true)
+ *       - in: query
+ *         name: outOfStock
+ *         schema:
+ *           type: string
+ *           enum: [true, false]
+ *         description: Filter for out of stock items
+ *     responses:
+ *       200:
+ *         description: Successful operation
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 total_products:
+ *                   type: integer
+ *                 total_inventory_value:
+ *                   type: string
+ *                 out_of_stock_count:
+ *                   type: integer
+ *                 categories:
+ *                   type: array
+ *                   items:
+ *                     type: string
+ *                 products:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       product_id:
+ *                         type: integer
+ *                       name:
+ *                         type: string
+ *                       sku:
+ *                         type: string
+ *                       category:
+ *                         type: string
+ *                       current_quantity:
+ *                         type: integer
+ *                       unit_price:
+ *                         type: number
+ *                       inventory_value:
+ *                         type: number
+ *       500:
+ *         description: Internal server error
  */
 export const getCurrentInventory = async (req, res) => {
     try {
@@ -91,9 +167,88 @@ export const getCurrentInventory = async (req, res) => {
 };
 
 /**
- * Get detailed inventory for a specific product
- * Returns current quantity, recent movements, and value
- * 
+ * @swagger
+ * /api/inventory/products/{id}:
+ *   get:
+ *     summary: Get inventory details for a specific product
+ *     description: Returns current quantity, recent movements, and value for a specific product
+ *     tags: [Inventory]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Product ID
+ *     responses:
+ *       200:
+ *         description: Successful operation
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 product:
+ *                   type: object
+ *                   properties:
+ *                     product_id:
+ *                       type: integer
+ *                     name:
+ *                       type: string
+ *                     sku:
+ *                       type: string
+ *                     category:
+ *                       type: string
+ *                     current_quantity:
+ *                       type: integer
+ *                     unit_price:
+ *                       type: number
+ *                     description:
+ *                       type: string
+ *                     inventory_value:
+ *                       type: number
+ *                 inventory_status:
+ *                   type: object
+ *                   properties:
+ *                     current_quantity:
+ *                       type: integer
+ *                     inventory_value:
+ *                       type: number
+ *                     is_in_stock:
+ *                       type: boolean
+ *                 movement_summary:
+ *                   type: object
+ *                   properties:
+ *                     total_in:
+ *                       type: integer
+ *                     total_out:
+ *                       type: integer
+ *                     net_change:
+ *                       type: integer
+ *                 recent_movements:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       movement_id:
+ *                         type: integer
+ *                       movement_type:
+ *                         type: string
+ *                       quantity:
+ *                         type: integer
+ *                       unit_price:
+ *                         type: number
+ *                       notes:
+ *                         type: string
+ *                       created_at:
+ *                         type: string
+ *                         format: date-time
+ *       400:
+ *         description: Bad request - Product ID is required
+ *       404:
+ *         description: Product not found
+ *       500:
+ *         description: Internal server error
  */
 export const getProductInventory = async (req, res) => {
     try {
@@ -181,8 +336,45 @@ export const getProductInventory = async (req, res) => {
 };
 
 /**
- * Get inventory alerts (low stock, out of stock)
- * 
+ * @swagger
+ * /api/inventory/alerts:
+ *   get:
+ *     summary: Get inventory alerts
+ *     description: Returns low stock and out of stock items
+ *     tags: [Inventory]
+ *     parameters:
+ *       - in: query
+ *         name: threshold
+ *         schema:
+ *           type: integer
+ *           default: 10
+ *         description: Threshold for low stock alerts
+ *     responses:
+ *       200:
+ *         description: Successful operation
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 threshold:
+ *                   type: integer
+ *                 total_alerts:
+ *                   type: integer
+ *                 out_of_stock_count:
+ *                   type: integer
+ *                 low_stock_count:
+ *                   type: integer
+ *                 out_of_stock:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/AlertItem'
+ *                 low_stock:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/AlertItem'
+ *       500:
+ *         description: Internal server error
  */
 export const getInventoryAlerts = async (req, res) => {
     try {
@@ -235,10 +427,45 @@ export const getInventoryAlerts = async (req, res) => {
 };
 
 /**
- * Get inventory value report
- * 
- * @param {Object} req - Request object with optional category parameter
- * @param {Object} res - Response object
+ * @swagger
+ * /api/inventory/value:
+ *   get:
+ *     summary: Get inventory value report
+ *     description: Returns inventory value breakdown by category
+ *     tags: [Inventory]
+ *     parameters:
+ *       - in: query
+ *         name: category
+ *         schema:
+ *           type: string
+ *         description: Filter by product category
+ *     responses:
+ *       200:
+ *         description: Successful operation
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 total_inventory_value:
+ *                   type: string
+ *                 category_count:
+ *                   type: integer
+ *                 category_breakdown:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       category:
+ *                         type: string
+ *                       total_quantity:
+ *                         type: integer
+ *                       total_value:
+ *                         type: number
+ *                       product_count:
+ *                         type: integer
+ *       500:
+ *         description: Internal server error
  */
 export const getInventoryValue = async (req, res) => {
     try {
@@ -289,3 +516,27 @@ export const getInventoryValue = async (req, res) => {
         res.status(500).json({ error: 'Internal server error' });
     }
 };
+
+/**
+ * @swagger
+ * components:
+ *   schemas:
+ *     AlertItem:
+ *       type: object
+ *       properties:
+ *         product_id:
+ *           type: integer
+ *         name:
+ *           type: string
+ *         sku:
+ *           type: string
+ *         category:
+ *           type: string
+ *         current_quantity:
+ *           type: integer
+ *         unit_price:
+ *           type: number
+ *         status:
+ *           type: string
+ *           enum: [OUT_OF_STOCK, LOW_STOCK, NORMAL]
+ */
