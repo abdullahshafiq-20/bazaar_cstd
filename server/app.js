@@ -15,7 +15,7 @@ app.use(cors({
     origin: [
       'http://localhost:3000',
       'http://localhost:5173',
-      'https://bazaar-cstd-frontedn-v1.vercel.app/'
+      'https://bazaar-cstd-frontedn-v1.vercel.app'
     ].filter(Boolean),
     credentials: true // Important for cookies/sessions
   }));
