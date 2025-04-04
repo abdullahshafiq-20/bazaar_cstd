@@ -11,6 +11,16 @@ dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+app.use(cors({ 
+    origin: [
+      'http://localhost:3000',
+      'http://localhost:5173',
+      'https://bazaar-cstd-frontedn-v1.vercel.app/'
+    ].filter(Boolean),
+    credentials: true // Important for cookies/sessions
+  }));
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
@@ -35,9 +45,7 @@ pool.on('error', (err) => {
 }
 );
 
-app.use(cors({ origin: '*' }));
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+
 app.use("/api", productRouter);
 app.use("/api", stockRouter);
 app.use("/api", inventoryRouter);
