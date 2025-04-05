@@ -7,6 +7,7 @@ import inventoryRouter from "./routes/inventoryRoutes.js";
 import authRouter from "./routes/authRoutes.js";
 import storeRouter from "./routes/storeRoutes.js";
 import adminRouter from "./routes/adminRoutes.js";
+import { setupSwagger } from './config/swagger.js';
 import cors from "cors";
 dotenv.config();
 
@@ -14,6 +15,7 @@ dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+setupSwagger(app);
 
 app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
