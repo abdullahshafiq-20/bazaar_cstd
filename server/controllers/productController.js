@@ -1,20 +1,110 @@
-// CREATE TABLE products (
-//     product_id SERIAL PRIMARY KEY,
-//     name VARCHAR(255) NOT NULL,
-//     description TEXT,
-//     sku VARCHAR(50) UNIQUE,
-//     category VARCHAR(100),
-//     unit_price DECIMAL(10, 2) NOT NULL,
-//     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-//     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-// );
 import pool from '../config/pool.js';
 
-// const client = await pool.connect();
-// const result = await client.query("SELECT current_database();");
-// console.log(result.rows);
-// client.release();
+/**
+ * @swagger
+ * components:
+ *   schemas:
+ *     Product:
+ *       type: object
+ *       required:
+ *         - name
+ *         - unit_price
+ *       properties:
+ *         product_id:
+ *           type: integer
+ *           description: The auto-generated ID of the product
+ *         name:
+ *           type: string
+ *           description: Product name
+ *         description:
+ *           type: string
+ *           description: Detailed product description
+ *         sku:
+ *           type: string
+ *           description: Stock keeping unit, unique identifier for inventory
+ *         category:
+ *           type: string
+ *           description: Product category
+ *         unit_price:
+ *           type: number
+ *           format: float
+ *           description: Price per unit
+ *         created_at:
+ *           type: string
+ *           format: date-time
+ *           description: Date when the product was created
+ *         updated_at:
+ *           type: string
+ *           format: date-time
+ *           description: Date when the product was last updated
+ *       example:
+ *         product_id: 1
+ *         name: Wireless Headphones
+ *         description: Premium noise-cancelling wireless headphones with 30-hour battery life
+ *         sku: AUDIO-WH100
+ *         category: Electronics
+ *         unit_price: 149.99
+ *         created_at: 2023-01-01T12:00:00Z
+ *         updated_at: 2023-01-01T12:00:00Z
+ *     
+ *     ProductInput:
+ *       type: object
+ *       required:
+ *         - name
+ *         - unit_price
+ *       properties:
+ *         name:
+ *           type: string
+ *           description: Product name
+ *         description:
+ *           type: string
+ *           description: Detailed product description
+ *         sku:
+ *           type: string
+ *           description: Stock keeping unit, unique identifier for inventory
+ *         category:
+ *           type: string
+ *           description: Product category
+ *         unit_price:
+ *           type: number
+ *           format: float
+ *           description: Price per unit
+ *       example:
+ *         name: Wireless Headphones
+ *         description: Premium noise-cancelling wireless headphones with 30-hour battery life
+ *         sku: AUDIO-WH100
+ *         category: Electronics
+ *         unit_price: 149.99
+ */
 
+/**
+ * @swagger
+ * tags:
+ *   name: Products
+ *   description: Product management API
+ */
+
+/**
+ * @swagger
+ * /api/product/get:
+ *   get:
+ *     summary: Get all products
+ *     description: Retrieve a list of all products
+ *     tags: [Products]
+ *     responses:
+ *       200:
+ *         description: A list of products
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/Product'
+ *       404:
+ *         description: No products found
+ *       500:
+ *         description: Server error
+ */
 export const getProducts = async (req, res) => {
     try {
         const query = `
@@ -33,6 +123,34 @@ export const getProducts = async (req, res) => {
     }
 };
 
+/**
+ * @swagger
+ * /api/product/get_by_id/{id}:
+ *   get:
+ *     summary: Get a product by ID
+ *     description: Retrieve a specific product by its ID
+ *     tags: [Products]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         schema:
+ *           type: integer
+ *         required: true
+ *         description: Numeric ID of the product to get
+ *     responses:
+ *       200:
+ *         description: Product details
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Product'
+ *       400:
+ *         description: Product ID is required
+ *       404:
+ *         description: Product not found
+ *       500:
+ *         description: Server error
+ */
 export const getProductById = async (req, res) => {
     try {
         const id = req.params.id;
@@ -61,7 +179,44 @@ export const getProductById = async (req, res) => {
     }
 };
 
-
+/**
+ * @swagger
+ * /api/product/create:
+ *   post:
+ *     summary: Create a new product
+ *     description: Add a new product to the database
+ *     tags: [Products]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/ProductInput'
+ *     responses:
+ *       201:
+ *         description: Product created successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: Product created successfully
+ *                 productId:
+ *                   type: integer
+ *                   example: 1
+ *       400:
+ *         description: Invalid input
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - Admin access required
+ *       500:
+ *         description: Server error
+ */
 export const createProduct = async (req, res) => {
     const { name, description, sku, category, unit_price } = req.body;
 
@@ -79,11 +234,38 @@ export const createProduct = async (req, res) => {
         console.error('Error creating product:', error);
         res.status(500).json({ error: error.message });
     }
-
 };
 
-// ...existing code...
-
+/**
+ * @swagger
+ * /api/product/create_demo:
+ *   post:
+ *     summary: Create demo products
+ *     description: Add a set of demo products to the database
+ *     tags: [Products]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       201:
+ *         description: Demo products created successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: Demo products created successfully
+ *                 count:
+ *                   type: integer
+ *                   example: 5
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - Admin access required
+ *       500:
+ *         description: Server error
+ */
 export const createDemoProducts = async (req, res) => {
     try {
         const demoProducts = [
@@ -153,8 +335,63 @@ export const createDemoProducts = async (req, res) => {
     }
 };
 
-
-
+/**
+ * @swagger
+ * /api/product/update/{id}:
+ *   put:
+ *     summary: Update a product
+ *     description: Update an existing product by ID
+ *     tags: [Products]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         schema:
+ *           type: integer
+ *         required: true
+ *         description: Numeric ID of the product to update
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               name:
+ *                 type: string
+ *               description:
+ *                 type: string
+ *               sku:
+ *                 type: string
+ *               category:
+ *                 type: string
+ *               unit_price:
+ *                 type: number
+ *                 format: float
+ *     responses:
+ *       200:
+ *         description: Product updated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: Product updated successfully
+ *                 product:
+ *                   $ref: '#/components/schemas/Product'
+ *       400:
+ *         description: Product ID is required or no fields to update provided
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - Admin access required
+ *       404:
+ *         description: Product not found
+ *       500:
+ *         description: Server error
+ */
 export const updateProduct = async (req, res) => {
     try {
         const id = req.params.id;
@@ -239,6 +476,46 @@ export const updateProduct = async (req, res) => {
     }
 };
 
+/**
+ * @swagger
+ * /api/product/delete/{id}:
+ *   delete:
+ *     summary: Delete a product
+ *     description: Delete a product by ID
+ *     tags: [Products]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         schema:
+ *           type: integer
+ *         required: true
+ *         description: Numeric ID of the product to delete
+ *     responses:
+ *       200:
+ *         description: Product deleted successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: Product deleted successfully
+ *                 product:
+ *                   $ref: '#/components/schemas/Product'
+ *       400:
+ *         description: Product ID is required
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - Admin access required
+ *       404:
+ *         description: Product not found
+ *       500:
+ *         description: Server error
+ */
 export const deleteProduct = async (req, res) => {
     try {
         const id = req.params.id;

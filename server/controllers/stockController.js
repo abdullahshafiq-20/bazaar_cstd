@@ -1,7 +1,285 @@
 import pool from '../config/pool.js';
 
 /**
- * Add stock to a specific store
+ * @swagger
+ * components:
+ *   schemas:
+ *     StockMovement:
+ *       type: object
+ *       properties:
+ *         movement_id:
+ *           type: integer
+ *           description: The auto-generated ID of the stock movement
+ *         product_id:
+ *           type: integer
+ *           description: The ID of the product
+ *         store_id:
+ *           type: integer
+ *           description: The ID of the store
+ *         movement_type:
+ *           type: string
+ *           enum: [STOCK_IN, SALE, MANUAL_REMOVAL]
+ *           description: Type of stock movement
+ *         quantity:
+ *           type: integer
+ *           description: Quantity involved in the movement
+ *         unit_price:
+ *           type: number
+ *           format: float
+ *           description: Unit price at the time of movement
+ *         notes:
+ *           type: string
+ *           description: Additional notes about the movement
+ *         created_at:
+ *           type: string
+ *           format: date-time
+ *           description: When the movement was recorded
+ *       example:
+ *         movement_id: 1
+ *         product_id: 5
+ *         store_id: 2
+ *         movement_type: STOCK_IN
+ *         quantity: 10
+ *         unit_price: 149.99
+ *         notes: Initial inventory
+ *         created_at: 2023-01-01T00:00:00.000Z
+ *     
+ *     StockTransfer:
+ *       type: object
+ *       required:
+ *         - source_store_id
+ *         - target_store_id
+ *         - product_id
+ *         - quantity
+ *       properties:
+ *         source_store_id:
+ *           type: integer
+ *           description: Store ID to transfer from
+ *         target_store_id:
+ *           type: integer
+ *           description: Store ID to transfer to
+ *         product_id:
+ *           type: integer
+ *           description: Product ID to transfer
+ *         quantity:
+ *           type: integer
+ *           description: Quantity to transfer
+ *         notes:
+ *           type: string
+ *           description: Optional notes about the transfer
+ *       example:
+ *         source_store_id: 1
+ *         target_store_id: 2
+ *         product_id: 5
+ *         quantity: 10
+ *         notes: Balancing inventory between stores
+ *     
+ *     StockInventory:
+ *       type: object
+ *       properties:
+ *         product_id:
+ *           type: integer
+ *           description: The product ID
+ *         name:
+ *           type: string
+ *           description: Product name
+ *         sku:
+ *           type: string
+ *           description: Stock keeping unit
+ *         category:
+ *           type: string
+ *           description: Product category
+ *         unit_price:
+ *           type: number
+ *           format: float
+ *           description: Current unit price
+ *         current_stock:
+ *           type: integer
+ *           description: Current quantity in stock
+ *       example:
+ *         product_id: 5
+ *         name: Wireless Headphones
+ *         sku: AUDIO-WH100
+ *         category: Electronics
+ *         unit_price: 149.99
+ *         current_stock: 25
+ *     
+ *     StockInventoryValue:
+ *       type: object
+ *       properties:
+ *         category:
+ *           type: string
+ *           description: Product category
+ *         value:
+ *           type: number
+ *           format: float
+ *           description: Total inventory value for this category
+ *         product_count:
+ *           type: integer
+ *           description: Number of products in this category
+ *         total_units:
+ *           type: integer
+ *           description: Total number of units in this category
+ *       example:
+ *         category: Electronics
+ *         value: 5249.65
+ *         product_count: 3
+ *         total_units: 35
+ *     
+ *     StockInventoryValueSummary:
+ *       type: object
+ *       properties:
+ *         total_value:
+ *           type: number
+ *           format: float
+ *           description: Total value of all inventory
+ *         total_products:
+ *           type: integer
+ *           description: Total number of distinct products
+ *         total_units:
+ *           type: integer
+ *           description: Total number of units in inventory
+ *       example:
+ *         total_value: 15750.85
+ *         total_products: 12
+ *         total_units: 158
+ *     
+ *     StockReport:
+ *       type: object
+ *       properties:
+ *         dateRange:
+ *           type: object
+ *           properties:
+ *             startDate:
+ *               type: string
+ *               format: date
+ *             endDate:
+ *               type: string
+ *               format: date
+ *         systemSummary:
+ *           type: object
+ *           properties:
+ *             activeStores:
+ *               type: integer
+ *             totalProducts:
+ *               type: integer
+ *             totalInventoryValue:
+ *               type: string
+ *         stores:
+ *           type: array
+ *           items:
+ *             type: object
+ *             properties:
+ *               id:
+ *                 type: integer
+ *               name:
+ *                 type: string
+ *               productCount:
+ *                 type: integer
+ *               inventoryValue:
+ *                 type: string
+ *               salesSummary:
+ *                 type: object
+ *                 properties:
+ *                   transactionCount:
+ *                     type: integer
+ *                   quantitySold:
+ *                     type: integer
+ *                   salesValue:
+ *                     type: string
+ *         inventory:
+ *           type: array
+ *           items:
+ *             type: object
+ *             properties:
+ *               storeId:
+ *                 type: integer
+ *               storeName:
+ *                 type: string
+ *               productId:
+ *                 type: integer
+ *               productName:
+ *                 type: string
+ *               category:
+ *                 type: string
+ *               sku:
+ *                 type: string
+ *               quantity:
+ *                 type: integer
+ *               unitPrice:
+ *                 type: string
+ *               value:
+ *                 type: string
+ */
+
+/**
+ * @swagger
+ * tags:
+ *   name: Stock
+ *   description: Stock management and inventory control
+ */
+
+/**
+ * @swagger
+ * /api/stores/{id}/stock/add:
+ *   post:
+ *     summary: Add stock to a store
+ *     description: Add quantity of a product to a specific store's inventory
+ *     tags: [Stock]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         schema:
+ *           type: integer
+ *         required: true
+ *         description: Store ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - product_id
+ *               - quantity
+ *             properties:
+ *               product_id:
+ *                 type: integer
+ *                 description: Product ID to add stock for
+ *               quantity:
+ *                 type: integer
+ *                 description: Quantity to add (must be greater than zero)
+ *               unit_price:
+ *                 type: number
+ *                 format: float
+ *                 description: Optional unit price override
+ *               notes:
+ *                 type: string
+ *                 description: Optional notes about this stock addition
+ *     responses:
+ *       201:
+ *         description: Stock added successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: Stock added successfully
+ *                 movement:
+ *                   $ref: '#/components/schemas/StockMovement'
+ *                 currentStock:
+ *                   type: integer
+ *                   example: 25
+ *       400:
+ *         description: Bad request - Missing required fields or invalid quantity
+ *       404:
+ *         description: Product or store not found
+ *       500:
+ *         description: Internal server error
  */
 export const addStock = async (req, res) => {
     try {
@@ -74,7 +352,83 @@ export const addStock = async (req, res) => {
 };
 
 /**
- * Record a sale for a specific store
+ * @swagger
+ * /api/stores/{id}/stock/sale:
+ *   post:
+ *     summary: Record a sale
+ *     description: Record a product sale from a specific store
+ *     tags: [Stock]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         schema:
+ *           type: integer
+ *         required: true
+ *         description: Store ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - product_id
+ *               - quantity
+ *             properties:
+ *               product_id:
+ *                 type: integer
+ *                 description: Product ID being sold
+ *               quantity:
+ *                 type: integer
+ *                 description: Quantity sold (must be greater than zero)
+ *               unit_price:
+ *                 type: number
+ *                 format: float
+ *                 description: Optional unit price for this sale
+ *               notes:
+ *                 type: string
+ *                 description: Optional notes about this sale
+ *     responses:
+ *       201:
+ *         description: Sale recorded successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: Sale recorded successfully
+ *                 movement:
+ *                   $ref: '#/components/schemas/StockMovement'
+ *                 remainingStock:
+ *                   type: integer
+ *                   example: 15
+ *       400:
+ *         description: Bad request - Missing required fields, invalid quantity, or insufficient stock
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: Insufficient stock at this store
+ *                 store:
+ *                   type: integer
+ *                   example: 2
+ *                 currentStock:
+ *                   type: integer
+ *                   example: 5
+ *                 requestedQuantity:
+ *                   type: integer
+ *                   example: 10
+ *       404:
+ *         description: Product or store not found
+ *       500:
+ *         description: Internal server error
  */
 export const recordSale = async (req, res) => {
     try {
@@ -149,7 +503,62 @@ export const recordSale = async (req, res) => {
 };
 
 /**
- * Manual removal of stock from a specific store
+ * @swagger
+ * /api/stores/{id}/stock/remove:
+ *   post:
+ *     summary: Manual stock removal
+ *     description: Manually remove stock from a store (not sales)
+ *     tags: [Stock]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         schema:
+ *           type: integer
+ *         required: true
+ *         description: Store ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - product_id
+ *               - quantity
+ *             properties:
+ *               product_id:
+ *                 type: integer
+ *                 description: Product ID to remove
+ *               quantity:
+ *                 type: integer
+ *                 description: Quantity to remove (must be greater than zero)
+ *               notes:
+ *                 type: string
+ *                 description: Reason for removal
+ *     responses:
+ *       201:
+ *         description: Stock removed successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: Stock removed successfully
+ *                 movement:
+ *                   $ref: '#/components/schemas/StockMovement'
+ *                 remainingStock:
+ *                   type: integer
+ *                   example: 15
+ *       400:
+ *         description: Bad request - Missing required fields, invalid quantity, or insufficient stock
+ *       404:
+ *         description: Product or store not found
+ *       500:
+ *         description: Internal server error
  */
 export const manualRemoval = async (req, res) => {
     try {
@@ -224,7 +633,85 @@ export const manualRemoval = async (req, res) => {
 };
 
 /**
- * Get stock movements for a specific store with optional filters
+ * @swagger
+ * /api/stores/{id}/stock/movements:
+ *   get:
+ *     summary: Get store stock movements
+ *     description: Get stock movement history for a specific store with optional filtering
+ *     tags: [Stock]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         schema:
+ *           type: integer
+ *         required: true
+ *         description: Store ID
+ *       - in: query
+ *         name: product_id
+ *         schema:
+ *           type: integer
+ *         description: Filter by product ID
+ *       - in: query
+ *         name: movement_type
+ *         schema:
+ *           type: string
+ *           enum: [STOCK_IN, SALE, MANUAL_REMOVAL]
+ *         description: Filter by movement type
+ *       - in: query
+ *         name: start_date
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Filter by start date (YYYY-MM-DD)
+ *       - in: query
+ *         name: end_date
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Filter by end date (YYYY-MM-DD)
+ *     responses:
+ *       200:
+ *         description: List of stock movements
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 count:
+ *                   type: integer
+ *                   example: 15
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       movement_id:
+ *                         type: integer
+ *                       product_id:
+ *                         type: integer
+ *                       product_name:
+ *                         type: string
+ *                       store_id:
+ *                         type: integer
+ *                       movement_type:
+ *                         type: string
+ *                       quantity:
+ *                         type: integer
+ *                       unit_price:
+ *                         type: number
+ *                         format: float
+ *                       notes:
+ *                         type: string
+ *                       created_at:
+ *                         type: string
+ *                         format: date-time
+ *       500:
+ *         description: Internal server error
  */
 export const getStoreStockMovements = async (req, res) => {
     try {
@@ -299,7 +786,55 @@ export const getStoreStockMovements = async (req, res) => {
 };
 
 /**
- * Get current stock levels for a specific store
+ * @swagger
+ * /api/stores/{id}/inventory:
+ *   get:
+ *     summary: Get store inventory
+ *     description: Get current inventory levels for a specific store
+ *     tags: [Stock]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         schema:
+ *           type: integer
+ *         required: true
+ *         description: Store ID
+ *       - in: query
+ *         name: category
+ *         schema:
+ *           type: string
+ *         description: Filter by product category
+ *     responses:
+ *       200:
+ *         description: List of products in inventory
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 store:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: integer
+ *                     name:
+ *                       type: string
+ *                 count:
+ *                   type: integer
+ *                   example: 25
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/StockInventory'
+ *       404:
+ *         description: Store not found
+ *       500:
+ *         description: Internal server error
  */
 export const getStoreInventory = async (req, res) => {
     try {
@@ -367,7 +902,49 @@ export const getStoreInventory = async (req, res) => {
 };
 
 /**
- * Get inventory value for a store
+ * @swagger
+ * /api/stores/{id}/inventory-value:
+ *   get:
+ *     summary: Get store inventory value
+ *     description: Get the total value of inventory in a store, broken down by category
+ *     tags: [Stock]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         schema:
+ *           type: integer
+ *         required: true
+ *         description: Store ID
+ *     responses:
+ *       200:
+ *         description: Inventory value summary
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 store:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: integer
+ *                     name:
+ *                       type: string
+ *                 total:
+ *                   $ref: '#/components/schemas/StockInventoryValueSummary'
+ *                 by_category:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/StockInventoryValue'
+ *       404:
+ *         description: Store not found
+ *       500:
+ *         description: Internal server error
  */
 export const getStoreInventoryValue = async (req, res) => {
     try {
@@ -482,7 +1059,60 @@ export const getStoreInventoryValue = async (req, res) => {
 };
 
 /**
- * Transfer stock between stores
+ * @swagger
+ * /api/transfers:
+ *   post:
+ *     summary: Transfer stock between stores
+ *     description: Move stock of a product from one store to another
+ *     tags: [Stock]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/StockTransfer'
+ *     responses:
+ *       200:
+ *         description: Stock transferred successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: Stock transferred successfully
+ *                 product:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: integer
+ *                     name:
+ *                       type: string
+ *                 quantity:
+ *                   type: integer
+ *                 source_store:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: integer
+ *                     remaining_stock:
+ *                       type: integer
+ *                 target_store:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: integer
+ *                     current_stock:
+ *                       type: integer
+ *       400:
+ *         description: Bad request - Missing required fields, invalid quantity, insufficient stock, or source and target stores are the same
+ *       404:
+ *         description: Product or one of the stores not found
+ *       500:
+ *         description: Internal server error
  */
 export const transferStock = async (req, res) => {
     try {
@@ -622,7 +1252,168 @@ export const transferStock = async (req, res) => {
     }
 };
 
-// Example controller function using date range filtering
+/**
+ * @swagger
+ * /api/reports/stock:
+ *   get:
+ *     summary: Get stock movement report
+ *     description: Get detailed stock movement report with optional date filtering
+ *     tags: [Stock]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: startDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Start date for report (YYYY-MM-DD), defaults to 30 days ago
+ *       - in: query
+ *         name: endDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: End date for report (YYYY-MM-DD), defaults to today
+ *     responses:
+ *       200:
+ *         description: Stock movement report
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 dateRange:
+ *                   type: object
+ *                   properties:
+ *                     startDate:
+ *                       type: string
+ *                       format: date
+ *                     endDate:
+ *                       type: string
+ *                       format: date
+ *                 count:
+ *                   type: integer
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       movement_id:
+ *                         type: integer
+ *                       product_id:
+ *                         type: integer
+ *                       product_name:
+ *                         type: string
+ *                       sku:
+ *                         type: string
+ *                       store_id:
+ *                         type: integer
+ *                       store_name:
+ *                         type: string
+ *                       movement_type:
+ *                         type: string
+ *                       quantity:
+ *                         type: integer
+ *                       unit_price:
+ *                         type: number
+ *                         format: float
+ *                       notes:
+ *                         type: string
+ *                       created_at:
+ *                         type: string
+ *                         format: date-time
+ *       403:
+ *         description: Forbidden - Admin access required
+ *       500:
+ *         description: Internal server error
+ */
+export const getStockReport = async (req, res) => {
+    try {
+      const { startDate, endDate } = req.dateFilter || { 
+        startDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), // Default last 30 days
+        endDate: new Date() 
+      };
+      
+      // Format dates for SQL query
+      const formattedStartDate = startDate.toISOString().split('T')[0];
+      const formattedEndDate = endDate.toISOString().split('T')[0];
+      
+      const result = await pool.query(
+        `SELECT 
+           sm.movement_id,
+           sm.product_id,
+           p.name AS product_name,
+           p.sku,
+           sm.store_id,
+           st.name AS store_name,
+           sm.movement_type,
+           sm.quantity,
+           sm.unit_price,
+           sm.notes,
+           sm.created_at
+         FROM stock_movements sm
+         JOIN products p ON sm.product_id = p.product_id
+         JOIN stores st ON sm.store_id = st.store_id
+         WHERE sm.created_at BETWEEN $1 AND $2
+         ORDER BY sm.created_at DESC`,
+        [formattedStartDate, formattedEndDate]
+      );
+      
+      res.status(200).json({
+        success: true,
+        dateRange: {
+          startDate: formattedStartDate,
+          endDate: formattedEndDate
+        },
+        count: result.rows.length,
+        data: result.rows
+      });
+    } catch (error) {
+      console.error("Error fetching stock report:", error);
+      res.status(500).json({ 
+        success: false, 
+        error: "Server error while generating report" 
+      });
+    }
+};
+
+/**
+ * @swagger
+ * /api/reports/system-stock:
+ *   get:
+ *     summary: Get system-wide stock report
+ *     description: Get comprehensive stock report across all stores with summary data
+ *     tags: [Stock]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: startDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Start date for report (YYYY-MM-DD), defaults to 30 days ago
+ *       - in: query
+ *         name: endDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: End date for report (YYYY-MM-DD), defaults to today
+ *     responses:
+ *       200:
+ *         description: System-wide stock report
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/StockReport'
+ *       403:
+ *         description: Forbidden - Admin access required
+ *       500:
+ *         description: Internal server error
+ */
 export const getAllStoresStockReport = async (req, res) => {
     try {
       const { startDate, endDate } = req.dateFilter || { 
@@ -883,57 +1674,6 @@ export const getAllStoresStockReport = async (req, res) => {
       res.status(500).json({ 
         success: false,
         error: "Server error while generating system-wide stock report" 
-      });
-    }
-};
-
-// Update the getStockReport to match the database schema and fix field names
-export const getStockReport = async (req, res) => {
-    try {
-      const { startDate, endDate } = req.dateFilter || { 
-        startDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), // Default last 30 days
-        endDate: new Date() 
-      };
-      
-      // Format dates for SQL query
-      const formattedStartDate = startDate.toISOString().split('T')[0];
-      const formattedEndDate = endDate.toISOString().split('T')[0];
-      
-      const result = await pool.query(
-        `SELECT 
-           sm.movement_id,
-           sm.product_id,
-           p.name AS product_name,
-           p.sku,
-           sm.store_id,
-           st.name AS store_name,
-           sm.movement_type,
-           sm.quantity,
-           sm.unit_price,
-           sm.notes,
-           sm.created_at
-         FROM stock_movements sm
-         JOIN products p ON sm.product_id = p.product_id
-         JOIN stores st ON sm.store_id = st.store_id
-         WHERE sm.created_at BETWEEN $1 AND $2
-         ORDER BY sm.created_at DESC`,
-        [formattedStartDate, formattedEndDate]
-      );
-      
-      res.status(200).json({
-        success: true,
-        dateRange: {
-          startDate: formattedStartDate,
-          endDate: formattedEndDate
-        },
-        count: result.rows.length,
-        data: result.rows
-      });
-    } catch (error) {
-      console.error("Error fetching stock report:", error);
-      res.status(500).json({ 
-        success: false, 
-        error: "Server error while generating report" 
       });
     }
 };

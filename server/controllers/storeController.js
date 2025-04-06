@@ -1,6 +1,376 @@
 import pool from '../config/pool.js';
 
+/**
+ * @swagger
+ * components:
+ *   schemas:
+ *     Store:
+ *       type: object
+ *       required:
+ *         - name
+ *       properties:
+ *         store_id:
+ *           type: integer
+ *           description: The auto-generated store ID
+ *         name:
+ *           type: string
+ *           description: Store name
+ *         address:
+ *           type: string
+ *           description: Store physical address
+ *         phone:
+ *           type: string
+ *           description: Store contact phone number
+ *         email:
+ *           type: string
+ *           format: email
+ *           description: Store contact email
+ *         is_active:
+ *           type: boolean
+ *           default: true
+ *           description: Whether the store is active
+ *         created_at:
+ *           type: string
+ *           format: date-time
+ *           description: Store creation timestamp
+ *         updated_at:
+ *           type: string
+ *           format: date-time
+ *           description: Store last update timestamp
+ *       example:
+ *         store_id: 1
+ *         name: Downtown Electronics
+ *         address: 123 Main St, Cityville, ST 12345
+ *         phone: (555) 123-4567
+ *         email: downtown@example.com
+ *         is_active: true
+ *         created_at: 2023-01-01T00:00:00.000Z
+ *         updated_at: 2023-01-01T00:00:00.000Z
+ *     
+ *     StoreWithStats:
+ *       allOf:
+ *         - $ref: '#/components/schemas/Store'
+ *         - type: object
+ *           properties:
+ *             managersCount:
+ *               type: integer
+ *               description: Number of managers assigned to the store
+ *             productCount:
+ *               type: integer
+ *               description: Number of distinct products in the store
+ *       example:
+ *         store_id: 1
+ *         name: Downtown Electronics
+ *         address: 123 Main St, Cityville, ST 12345
+ *         phone: (555) 123-4567
+ *         email: downtown@example.com
+ *         is_active: true
+ *         created_at: 2023-01-01T00:00:00.000Z
+ *         updated_at: 2023-01-01T00:00:00.000Z
+ *         managersCount: 2
+ *         productCount: 45
+ *     
+ *     StoreInput:
+ *       type: object
+ *       required:
+ *         - name
+ *       properties:
+ *         name:
+ *           type: string
+ *           description: Store name
+ *         address:
+ *           type: string
+ *           description: Store physical address
+ *         phone:
+ *           type: string
+ *           description: Store contact phone number
+ *         email:
+ *           type: string
+ *           format: email
+ *           description: Store contact email
+ *         is_active:
+ *           type: boolean
+ *           default: true
+ *           description: Whether the store is active
+ *       example:
+ *         name: Downtown Electronics
+ *         address: 123 Main St, Cityville, ST 12345
+ *         phone: (555) 123-4567
+ *         email: downtown@example.com
+ *         is_active: true
+ *     
+ *     StoreStatusUpdate:
+ *       type: object
+ *       required:
+ *         - is_active
+ *       properties:
+ *         is_active:
+ *           type: boolean
+ *           description: New active status for the store
+ *       example:
+ *         is_active: false
+ *     
+ *     StoreManager:
+ *       type: object
+ *       properties:
+ *         user_id:
+ *           type: integer
+ *           description: User ID of the manager
+ *         username:
+ *           type: string
+ *           description: Username of the manager
+ *         email:
+ *           type: string
+ *           format: email
+ *           description: Email of the manager
+ *         full_name:
+ *           type: string
+ *           description: Full name of the manager
+ *         is_active:
+ *           type: boolean
+ *           description: Whether the manager is active
+ *         role:
+ *           type: string
+ *           description: Role of the user (STORE_MANAGER)
+ *       example:
+ *         user_id: 2
+ *         username: manager1
+ *         email: manager1@example.com
+ *         full_name: John Manager
+ *         is_active: true
+ *         role: STORE_MANAGER
+ *     
+ *     StoreFullDetails:
+ *       type: object
+ *       properties:
+ *         success:
+ *           type: boolean
+ *           description: Operation success status
+ *         storeInfo:
+ *           $ref: '#/components/schemas/Store'
+ *         dateRange:
+ *           type: object
+ *           properties:
+ *             startDate:
+ *               type: string
+ *               format: date
+ *               description: Start date for the report data
+ *             endDate:
+ *               type: string
+ *               format: date
+ *               description: End date for the report data
+ *         managers:
+ *           type: object
+ *           properties:
+ *             count:
+ *               type: integer
+ *               description: Number of managers assigned to the store
+ *             data:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/StoreManager'
+ *         inventorySummary:
+ *           type: object
+ *           properties:
+ *             totalValue:
+ *               type: string
+ *               description: Total value of inventory in the store
+ *             itemCount:
+ *               type: integer
+ *               description: Number of distinct product items in inventory
+ *             items:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   product_id:
+ *                     type: integer
+ *                   product_name:
+ *                     type: string
+ *                   sku:
+ *                     type: string
+ *                   quantity:
+ *                     type: integer
+ *                   unit_price:
+ *                     type: number
+ *                     format: float
+ *                   total_value:
+ *                     type: number
+ *                     format: float
+ *         stockMovements:
+ *           type: object
+ *           properties:
+ *             count:
+ *               type: integer
+ *               description: Number of stock movements in the time period
+ *             data:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   movement_id:
+ *                     type: integer
+ *                   movement_date:
+ *                     type: string
+ *                     format: date-time
+ *                   movement_type:
+ *                     type: string
+ *                     enum: [STOCK_IN, SALE, MANUAL_REMOVAL]
+ *                   quantity:
+ *                     type: integer
+ *                   product_name:
+ *                     type: string
+ *                   sku:
+ *                     type: string
+ *                   created_by:
+ *                     type: string
+ *         topSellingProducts:
+ *           type: object
+ *           properties:
+ *             count:
+ *               type: integer
+ *               description: Number of top-selling products
+ *             data:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   product_id:
+ *                     type: integer
+ *                   name:
+ *                     type: string
+ *                   sku:
+ *                     type: string
+ *                   total_sold:
+ *                     type: integer
+ *         lowStockItems:
+ *           type: object
+ *           properties:
+ *             count:
+ *               type: integer
+ *               description: Number of low stock items
+ *             data:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   product_id:
+ *                     type: integer
+ *                   name:
+ *                     type: string
+ *                   sku:
+ *                     type: string
+ *                   quantity:
+ *                     type: integer
+ *     
+ *     AllStoresDetails:
+ *       type: object
+ *       properties:
+ *         success:
+ *           type: boolean
+ *           description: Operation success status
+ *         dateRange:
+ *           type: object
+ *           properties:
+ *             startDate:
+ *               type: string
+ *               format: date
+ *             endDate:
+ *               type: string
+ *               format: date
+ *         storesCount:
+ *           type: integer
+ *           description: Number of active stores
+ *         stores:
+ *           type: array
+ *           items:
+ *             type: object
+ *             properties:
+ *               id:
+ *                 type: integer
+ *               name:
+ *                 type: string
+ *               address:
+ *                 type: string
+ *               phone:
+ *                 type: string
+ *               email:
+ *                 type: string
+ *               isActive:
+ *                 type: boolean
+ *               inventoryValue:
+ *                 type: string
+ *                 description: Total inventory value in the store
+ *               productCount:
+ *                 type: integer
+ *                 description: Number of products in the store
+ *               salesData:
+ *                 type: object
+ *                 properties:
+ *                   transactionCount:
+ *                     type: integer
+ *                   totalSales:
+ *                     type: string
+ *                     description: Total sales value in the period
+ *               managerCount:
+ *                 type: integer
+ *                 description: Number of managers assigned to the store
+ *               lowStockCount:
+ *                 type: integer
+ *                 description: Number of low stock items
+ */
 
+/**
+ * @swagger
+ * tags:
+ *   name: Stores
+ *   description: Store management and reporting
+ */
+
+/**
+ * @swagger
+ * /api/stores:
+ *   get:
+ *     summary: Get all stores
+ *     description: Retrieve a list of all stores with optional filtering
+ *     tags: [Stores]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: name
+ *         schema:
+ *           type: string
+ *         description: Filter stores by name (case-insensitive partial match)
+ *       - in: query
+ *         name: isActive
+ *         schema:
+ *           type: string
+ *           enum: [true, false]
+ *         description: Filter stores by active status
+ *     responses:
+ *       200:
+ *         description: List of stores
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 count:
+ *                   type: integer
+ *                   example: 10
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Store'
+ *       401:
+ *         description: Unauthorized - User not authenticated
+ *       500:
+ *         description: Server error
+ */
 export const getAllStores = async (req, res) => {
   try {
     // Get optional query parameters for filtering
@@ -45,7 +415,42 @@ export const getAllStores = async (req, res) => {
   }
 };
 
-
+/**
+ * @swagger
+ * /api/stores/{id}:
+ *   get:
+ *     summary: Get store by ID
+ *     description: Retrieve a specific store by its ID with additional statistics
+ *     tags: [Stores]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         schema:
+ *           type: integer
+ *         required: true
+ *         description: Store ID to retrieve
+ *     responses:
+ *       200:
+ *         description: Store details with statistics
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   $ref: '#/components/schemas/StoreWithStats'
+ *       401:
+ *         description: Unauthorized - User not authenticated
+ *       404:
+ *         description: Store not found
+ *       500:
+ *         description: Server error
+ */
 export const getStoreById = async (req, res) => {
   try {
     const { id } = req.params;
@@ -93,7 +498,46 @@ export const getStoreById = async (req, res) => {
   }
 };
 
-
+/**
+ * @swagger
+ * /api/stores:
+ *   post:
+ *     summary: Create a new store
+ *     description: Create a new store (admin only)
+ *     tags: [Stores]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/StoreInput'
+ *     responses:
+ *       201:
+ *         description: Store created successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: Store created successfully
+ *                 data:
+ *                   $ref: '#/components/schemas/Store'
+ *       400:
+ *         description: Bad request - Invalid input or missing required fields
+ *       401:
+ *         description: Unauthorized - User not authenticated
+ *       403:
+ *         description: Forbidden - User is not an admin
+ *       500:
+ *         description: Server error
+ */
 export const createStore = async (req, res) => {
   try {
     const { name, address, phone, email, is_active } = req.body;
@@ -134,7 +578,55 @@ export const createStore = async (req, res) => {
   }
 };
 
-
+/**
+ * @swagger
+ * /api/stores/{id}:
+ *   put:
+ *     summary: Update a store
+ *     description: Update an existing store (admin only)
+ *     tags: [Stores]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         schema:
+ *           type: integer
+ *         required: true
+ *         description: Store ID to update
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/StoreInput'
+ *     responses:
+ *       200:
+ *         description: Store updated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: Store updated successfully
+ *                 data:
+ *                   $ref: '#/components/schemas/Store'
+ *       400:
+ *         description: Bad request - Invalid input or missing required fields
+ *       401:
+ *         description: Unauthorized - User not authenticated
+ *       403:
+ *         description: Forbidden - User is not an admin
+ *       404:
+ *         description: Store not found
+ *       500:
+ *         description: Server error
+ */
 export const updateStore = async (req, res) => {
   try {
     const { id } = req.params;
@@ -192,7 +684,60 @@ export const updateStore = async (req, res) => {
   }
 };
 
-
+/**
+ * @swagger
+ * /api/stores/{id}:
+ *   delete:
+ *     summary: Delete a store
+ *     description: Delete a store that has no inventory or assigned users (admin only)
+ *     tags: [Stores]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         schema:
+ *           type: integer
+ *         required: true
+ *         description: Store ID to delete
+ *     responses:
+ *       200:
+ *         description: Store deleted successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: Store deleted successfully
+ *                 data:
+ *                   $ref: '#/components/schemas/Store'
+ *       400:
+ *         description: Bad request - Cannot delete store with dependencies
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 message:
+ *                   type: string
+ *                   example: Cannot delete store with existing inventory movements. Deactivate it instead.
+ *       401:
+ *         description: Unauthorized - User not authenticated
+ *       403:
+ *         description: Forbidden - User is not an admin
+ *       404:
+ *         description: Store not found
+ *       500:
+ *         description: Server error
+ */
 export const deleteStore = async (req, res) => {
   try {
     const { id } = req.params;
@@ -267,7 +812,55 @@ export const deleteStore = async (req, res) => {
   }
 };
 
-
+/**
+ * @swagger
+ * /api/stores/{id}/status:
+ *   patch:
+ *     summary: Change store status
+ *     description: Activate or deactivate a store (admin only)
+ *     tags: [Stores]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         schema:
+ *           type: integer
+ *         required: true
+ *         description: Store ID to update
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/StoreStatusUpdate'
+ *     responses:
+ *       200:
+ *         description: Store status updated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: Store activated successfully
+ *                 data:
+ *                   $ref: '#/components/schemas/Store'
+ *       400:
+ *         description: Bad request - Missing required fields
+ *       401:
+ *         description: Unauthorized - User not authenticated
+ *       403:
+ *         description: Forbidden - User is not an admin
+ *       404:
+ *         description: Store not found
+ *       500:
+ *         description: Server error
+ */
 export const toggleStoreStatus = async (req, res) => {
   try {
     const { id } = req.params;
@@ -307,7 +900,49 @@ export const toggleStoreStatus = async (req, res) => {
   }
 };
 
-
+/**
+ * @swagger
+ * /api/stores/{id}/managers:
+ *   get:
+ *     summary: Get store managers
+ *     description: Retrieve all managers assigned to a specific store (admin only)
+ *     tags: [Stores]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         schema:
+ *           type: integer
+ *         required: true
+ *         description: Store ID to get managers for
+ *     responses:
+ *       200:
+ *         description: List of store managers
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 count:
+ *                   type: integer
+ *                   example: 3
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/StoreManager'
+ *       401:
+ *         description: Unauthorized - User not authenticated
+ *       403:
+ *         description: Forbidden - User is not an admin
+ *       404:
+ *         description: Store not found
+ *       500:
+ *         description: Server error
+ */
 export const getStoreManagers = async (req, res) => {
   try {
     const { id } = req.params;
@@ -349,12 +984,50 @@ export const getStoreManagers = async (req, res) => {
   }
 };
 
-
-const isValidEmail = (email) => {
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  return emailRegex.test(email);
-};
-
+/**
+ * @swagger
+ * /api/stores/{id}/full-details:
+ *   get:
+ *     summary: Get detailed store report
+ *     description: Get comprehensive report for a store including inventory, sales, managers and more
+ *     tags: [Stores]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         schema:
+ *           type: integer
+ *         required: true
+ *         description: Store ID
+ *       - in: query
+ *         name: startDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Start date for report data (YYYY-MM-DD)
+ *       - in: query
+ *         name: endDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: End date for report data (YYYY-MM-DD)
+ *     responses:
+ *       200:
+ *         description: Detailed store report
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/StoreFullDetails'
+ *       401:
+ *         description: Unauthorized - User not authenticated
+ *       403:
+ *         description: Forbidden - User is not an admin
+ *       404:
+ *         description: Store not found
+ *       500:
+ *         description: Server error
+ */
 export const getStoreFullDetails = async (req, res) => {
   const { id } = req.params;
   const { startDate, endDate } = req.dateFilter || {
@@ -527,6 +1200,42 @@ export const getStoreFullDetails = async (req, res) => {
   }
 };
 
+/**
+ * @swagger
+ * /api/stores/reports/all:
+ *   get:
+ *     summary: Get all stores report
+ *     description: Get comprehensive report across all active stores
+ *     tags: [Stores]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: startDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Start date for report data (YYYY-MM-DD)
+ *       - in: query
+ *         name: endDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: End date for report data (YYYY-MM-DD)
+ *     responses:
+ *       200:
+ *         description: All stores report
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/AllStoresDetails'
+ *       401:
+ *         description: Unauthorized - User not authenticated
+ *       403:
+ *         description: Forbidden - User is not an admin
+ *       500:
+ *         description: Server error
+ */
 export const getAllStoresFullDetails = async (req, res) => {
   const { startDate, endDate } = req.dateFilter || {
     startDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), // Default last 30 days
@@ -663,4 +1372,12 @@ export const getAllStoresFullDetails = async (req, res) => {
       message: 'Server error while fetching stores details'
     });
   }
+};
+
+/**
+ * Helper function to validate email format
+ */
+const isValidEmail = (email) => {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email);
 };
