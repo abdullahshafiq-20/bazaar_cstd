@@ -27,7 +27,7 @@ function Dashboard() {
     const calculateTotalValue = (products) => {
       return products.reduce((total, product) => {
         const price = parseFloat(product.unit_price) || 0;
-        const quantity = parseInt(product.current_stock) || 0; // Changed from current_quantity
+        const quantity = parseInt(product.current_stock) || 0; // Changed from
         return total + (price * quantity);
       }, 0).toFixed(2);
     };

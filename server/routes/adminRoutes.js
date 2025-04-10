@@ -12,7 +12,7 @@ import { verifyToken, requireAdmin } from '../middleware/authMiddleware.js';
 
 const adminRouter = express.Router();
 
-// All routes require authentication and admin privileges
+// All routes require authentication and admin privile
 adminRouter.use(verifyToken, requireAdmin);
 
 // Store-Manager assignment routes
