@@ -127,7 +127,53 @@ export const rateLimiter = (req, res, next) => {
   });
 };
 
-// Admin endpoint to reload rate limits configuration
+/**
+ * @swagger
+ * components:
+ *   schemas:
+ *     RateLimitConfig:
+ *       type: object
+ *       properties:
+ *         endpoint:
+ *           type: integer
+ *           description: Maximum number of requests allowed in the time window
+ *           example:
+ *             "/api/products": 200
+ *             "/api/auth": 20
+ *       description: An object mapping API endpoints to their rate limits
+ */
+
+/**
+ * @swagger
+ * /api/admin/rate-limits/reload:
+ *   get:
+ *     summary: Reload rate limits from configuration file
+ *     description: Reloads endpoint-specific rate limits from the configuration file
+ *     tags:
+ *       - Rate Limiting
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Rate limits reloaded successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: "Rate limits reloaded"
+ *                 currentLimits:
+ *                   $ref: '#/components/schemas/RateLimitConfig'
+ *       401:
+ *         description: Unauthorized - Authentication required
+ *       403:
+ *         description: Forbidden - Admin privileges required
+ */
 export const reloadRateLimits = (req, res) => {
   loadEndpointLimits();
   res.status(200).json({
@@ -137,7 +183,47 @@ export const reloadRateLimits = (req, res) => {
   });
 };
 
-// Admin endpoint to update rate limits
+/**
+ * @swagger
+ * /api/admin/rate-limits/update:
+ *   post:
+ *     summary: Update rate limits configuration
+ *     description: Updates and saves endpoint-specific rate limits to the configuration file
+ *     tags:
+ *       - Rate Limiting
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/RateLimitConfig'
+ *     responses:
+ *       200:
+ *         description: Rate limits updated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: "Rate limits updated successfully"
+ *                 currentLimits:
+ *                   $ref: '#/components/schemas/RateLimitConfig'
+ *       400:
+ *         description: Invalid rate limits format
+ *       401:
+ *         description: Unauthorized - Authentication required
+ *       403:
+ *         description: Forbidden - Admin privileges required
+ *       500:
+ *         description: Server error updating rate limits
+ */
 export const updateRateLimits = (req, res) => {
   try {
     const newLimits = req.body;

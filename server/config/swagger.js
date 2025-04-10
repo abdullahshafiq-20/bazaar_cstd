@@ -54,8 +54,10 @@ if (process.env.NODE_ENV === 'production') {
 } else {
   // In development, use absolute paths
   apiPaths = [
+    path.join(__dirname, '../middleware/*.js'),
     path.join(__dirname, '../controllers/*.js'),
     path.join(__dirname, '../routes/*.js')
+    
   ];
 }
 
@@ -72,6 +74,32 @@ console.log('Swagger detected paths:', Object.keys(swaggerSpec.paths || {}).leng
 console.log('Swagger detected schemas:', Object.keys(swaggerSpec.components?.schemas || {}).length);
 
 export const setupSwagger = (app) => {
+  const options = {
+    definition: {
+      openapi: '3.0.0',
+      info: {
+        title: 'Bazaar API',
+        version: '2',
+        description: 'Bazaar API documentation',
+      },
+      tags: [
+        {
+          name: 'Rate Limiting',
+          description: 'Endpoints for managing API rate limits'
+        }
+      ],
+      components: {
+        securitySchemes: {
+          bearerAuth: {
+            type: 'http',
+            scheme: 'bearer',
+            bearerFormat: 'JWT',
+          },
+        },
+      },
+    },
+  };
+
   // Always serve swagger docs, but log differently based on environment
   app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
   
