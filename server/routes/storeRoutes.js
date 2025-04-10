@@ -11,7 +11,7 @@ import {
   getAllStoresFullDetails
 } from '../controllers/storeController.js';
 import { verifyToken, requireAdmin } from '../middleware/authMiddleware.js';
-import dateRangeFilter from '../middlewares/dateRangeFilter.js';
+import dateRangeFilter from '../middleware/dateRangeFilter.js';
 
 /**
  * @swagger
