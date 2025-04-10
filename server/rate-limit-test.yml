@@ -1,0 +1,23 @@
+config:
+  target: "http://localhost:3000"
+  phases:
+    - duration: 30
+      arrivalRate: 10
+      name: "Warming up"
+    - duration: 60
+      arrivalRate: 30
+      name: "High load"
+  defaults:
+    headers:
+      Content-Type: "application/json"
+
+scenarios:
+  - flow:
+      - get:
+          url: "/api/products"
+          capture:
+            - json: "$.success"
+              as: "success"
+      - get:
+          url: "/api/auth/validate"
+      - think: 1

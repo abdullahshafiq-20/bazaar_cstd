@@ -1,0 +1,7 @@
+{
+    "/api/auth": 20,
+    "/api/stores": 150,
+    "/api/product": 200,
+    "/api/reports": 30,
+    "/api/admin": 50
+  }
