@@ -1252,109 +1252,175 @@ export const getAllStoresFullDetails = async (req, res) => {
       'SELECT * FROM stores WHERE is_active = $1 ORDER BY name',
       [true]
     );
+    
+    const activeStores = storesQuery.rows;
+    
+    // Create an array to hold all store IDs for batch querying
+    const storeIds = activeStores.map(store => store.store_id);
+    
+    // Execute all common queries in parallel to get data for all stores at once
+    const [inventoryValues, productCounts, salesData, managerCounts, lowStockCounts] = await Promise.all([
+      // Get inventory values for all stores - FIXED to avoid nested aggregates
+      pool.query(`
+        WITH current_stock AS (
+          SELECT 
+            sm.store_id,
+            sm.product_id,
+            p.unit_price,
+            SUM(CASE 
+              WHEN sm.movement_type = 'STOCK_IN' THEN sm.quantity
+              WHEN sm.movement_type IN ('SALE', 'MANUAL_REMOVAL') THEN -sm.quantity
+              ELSE 0
+            END) AS quantity
+          FROM stock_movements sm
+          JOIN products p ON p.product_id = sm.product_id
+          WHERE sm.store_id = ANY($1)
+          GROUP BY sm.store_id, sm.product_id, p.unit_price
+          HAVING SUM(CASE 
+            WHEN sm.movement_type = 'STOCK_IN' THEN sm.quantity
+            WHEN sm.movement_type IN ('SALE', 'MANUAL_REMOVAL') THEN -sm.quantity
+            ELSE 0
+          END) > 0
+        )
+        SELECT 
+          store_id,
+          SUM(unit_price * quantity) AS total_value
+        FROM current_stock
+        GROUP BY store_id
+      `, [storeIds]),
+      
+      // Get product counts for all stores
+      pool.query(`
+        SELECT 
+          store_id,
+          COUNT(DISTINCT product_id) AS product_count
+        FROM (
+          SELECT 
+            sm.store_id,
+            sm.product_id,
+            SUM(CASE 
+              WHEN sm.movement_type = 'STOCK_IN' THEN sm.quantity
+              WHEN sm.movement_type IN ('SALE', 'MANUAL_REMOVAL') THEN -sm.quantity
+              ELSE 0
+            END) AS current_stock
+          FROM stock_movements sm
+          WHERE sm.store_id = ANY($1)
+          GROUP BY sm.store_id, sm.product_id
+          HAVING SUM(CASE 
+            WHEN sm.movement_type = 'STOCK_IN' THEN sm.quantity
+            WHEN sm.movement_type IN ('SALE', 'MANUAL_REMOVAL') THEN -sm.quantity
+            ELSE 0
+          END) > 0
+        ) AS products_with_stock
+        GROUP BY store_id
+      `, [storeIds]),
+      
+      // Get sales data for all stores in date range
+      pool.query(`
+        SELECT 
+          store_id,
+          COUNT(DISTINCT movement_id) AS transaction_count,
+          SUM(quantity * unit_price) AS total_sales
+        FROM stock_movements
+        WHERE store_id = ANY($1)
+          AND movement_type = 'SALE'
+          AND created_at BETWEEN $2 AND $3
+        GROUP BY store_id
+      `, [storeIds, formattedStartDate, formattedEndDate]),
+      
+      // Get manager counts for all stores
+      pool.query(`
+        SELECT 
+          store_id,
+          COUNT(*) AS manager_count
+        FROM user_roles
+        WHERE store_id = ANY($1) 
+          AND role = 'STORE_MANAGER'
+        GROUP BY store_id
+      `, [storeIds]),
+      
+      // Get low stock counts for all stores
+      pool.query(`
+        SELECT 
+          store_id,
+          COUNT(DISTINCT product_id) AS low_stock_count
+        FROM (
+          SELECT 
+            sm.store_id,
+            sm.product_id,
+            SUM(CASE 
+              WHEN sm.movement_type = 'STOCK_IN' THEN sm.quantity
+              WHEN sm.movement_type IN ('SALE', 'MANUAL_REMOVAL') THEN -sm.quantity
+              ELSE 0
+            END) AS current_stock
+          FROM stock_movements sm
+          WHERE sm.store_id = ANY($1)
+          GROUP BY sm.store_id, sm.product_id
+          HAVING SUM(CASE 
+            WHEN sm.movement_type = 'STOCK_IN' THEN sm.quantity
+            WHEN sm.movement_type IN ('SALE', 'MANUAL_REMOVAL') THEN -sm.quantity
+            ELSE 0
+          END) > 0 
+          AND SUM(CASE 
+            WHEN sm.movement_type = 'STOCK_IN' THEN sm.quantity
+            WHEN sm.movement_type IN ('SALE', 'MANUAL_REMOVAL') THEN -sm.quantity
+            ELSE 0
+          END) <= 10
+        ) AS low_stock_products
+        GROUP BY store_id
+      `, [storeIds])
+    ]);
+    
+    // Process inventory values to get totals per store
+    const inventoryValuesByStore = {};
+    inventoryValues.rows.forEach(row => {
+      inventoryValuesByStore[row.store_id] = parseFloat(row.total_value || 0);
+    });
+    
+    // Create lookup objects for each data type
+    const productCountsByStore = {};
+    productCounts.rows.forEach(row => {
+      productCountsByStore[row.store_id] = parseInt(row.product_count);
+    });
+    
+    const salesDataByStore = {};
+    salesData.rows.forEach(row => {
+      salesDataByStore[row.store_id] = {
+        transactionCount: parseInt(row.transaction_count),
+        totalSales: parseFloat(row.total_sales || 0)
+      };
+    });
+    
+    const managerCountsByStore = {};
+    managerCounts.rows.forEach(row => {
+      managerCountsByStore[row.store_id] = parseInt(row.manager_count);
+    });
+    
+    const lowStockCountsByStore = {};
+    lowStockCounts.rows.forEach(row => {
+      lowStockCountsByStore[row.store_id] = parseInt(row.low_stock_count);
+    });
 
-    const storesData = [];
-
-    // For each store, gather relevant data
-    for (const store of storesQuery.rows) {
-      // Get inventory value for this store - fixed nested aggregation
-      const inventoryValueQuery = await pool.query(
-        `SELECT 
-          SUM(current_value) AS total_value
-         FROM (
-           SELECT 
-             p.product_id,
-             COALESCE(SUM(CASE 
-               WHEN sm.movement_type = 'STOCK_IN' THEN sm.quantity
-               WHEN sm.movement_type IN ('SALE', 'MANUAL_REMOVAL') THEN -sm.quantity
-               ELSE 0
-             END), 0) * p.unit_price AS current_value
-           FROM products p
-           LEFT JOIN stock_movements sm ON p.product_id = sm.product_id
-           WHERE sm.store_id = $1
-           GROUP BY p.product_id, p.unit_price
-           HAVING COALESCE(SUM(CASE 
-             WHEN sm.movement_type = 'STOCK_IN' THEN sm.quantity
-             WHEN sm.movement_type IN ('SALE', 'MANUAL_REMOVAL') THEN -sm.quantity
-             ELSE 0
-           END), 0) > 0
-         ) AS inventory_values`,
-        [store.store_id]
-      );
-
-      // Get product count for this store - fixed by using a subquery
-      const productCountQuery = await pool.query(
-        `SELECT COUNT(*) AS product_count
-         FROM (
-           SELECT p.product_id
-           FROM products p
-           JOIN stock_movements sm ON p.product_id = sm.product_id
-           WHERE sm.store_id = $1
-           GROUP BY p.product_id
-           HAVING COALESCE(SUM(CASE 
-             WHEN sm.movement_type = 'STOCK_IN' THEN sm.quantity
-             WHEN sm.movement_type IN ('SALE', 'MANUAL_REMOVAL') THEN -sm.quantity
-             ELSE 0
-           END), 0) > 0
-         ) AS products_with_stock`,
-        [store.store_id]
-      );
-
-      // Get total sales for this store in date range
-      const salesQuery = await pool.query(
-        `SELECT 
-           COUNT(DISTINCT movement_id) AS transaction_count, 
-           SUM(quantity * unit_price) AS total_sales
-         FROM stock_movements
-         WHERE store_id = $1 
-           AND movement_type = 'SALE'
-           AND created_at BETWEEN $2 AND $3`,
-        [store.store_id, formattedStartDate, formattedEndDate]
-      );
-
-      // Get manager count
-      const managerCountQuery = await pool.query(
-        `SELECT COUNT(*) AS manager_count
-         FROM user_roles
-         WHERE store_id = $1 AND role = 'STORE_MANAGER'`,
-        [store.store_id]
-      );
-
-      // Get low stock count - fixed by using a subquery
-      const lowStockQuery = await pool.query(
-        `SELECT COUNT(*) AS low_stock_count
-         FROM (
-           SELECT p.product_id
-           FROM products p
-           JOIN stock_movements sm ON p.product_id = sm.product_id
-           WHERE sm.store_id = $1
-           GROUP BY p.product_id
-           HAVING COALESCE(SUM(CASE 
-             WHEN sm.movement_type = 'STOCK_IN' THEN sm.quantity
-             WHEN sm.movement_type IN ('SALE', 'MANUAL_REMOVAL') THEN -sm.quantity
-             ELSE 0
-           END), 0) <= 10
-         ) AS low_stock_products`,
-        [store.store_id]
-      );
-
-      storesData.push({
-        id: store.store_id,
+    // Map store data with the collected metrics
+    const storesData = activeStores.map(store => {
+      const storeId = store.store_id;
+      return {
+        id: storeId,
         name: store.name,
         address: store.address,
         phone: store.phone,
         email: store.email,
         isActive: store.is_active,
-        inventoryValue: Number(inventoryValueQuery.rows[0]?.total_value || 0).toFixed(2),
-        productCount: Number(productCountQuery.rows[0]?.product_count || 0),
+        inventoryValue: Number(inventoryValuesByStore[storeId] || 0).toFixed(2),
+        productCount: productCountsByStore[storeId] || 0,
         salesData: {
-          transactionCount: Number(salesQuery.rows[0]?.transaction_count || 0),
-          totalSales: Number(salesQuery.rows[0]?.total_sales || 0).toFixed(2)
+          transactionCount: salesDataByStore[storeId]?.transactionCount || 0,
+          totalSales: Number(salesDataByStore[storeId]?.totalSales || 0).toFixed(2)
         },
-        managerCount: Number(managerCountQuery.rows[0]?.manager_count || 0),
-        lowStockCount: Number(lowStockQuery.rows[0]?.low_stock_count || 0)
-      });
-    }
+        managerCount: managerCountsByStore[storeId] || 0,
+        lowStockCount: lowStockCountsByStore[storeId] || 0
+      };
+    });
 
     res.status(200).json({
       success: true,
@@ -1373,7 +1439,6 @@ export const getAllStoresFullDetails = async (req, res) => {
     });
   }
 };
-
 /**
  * Helper function to validate email format
  */

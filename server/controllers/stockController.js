@@ -1416,264 +1416,262 @@ export const getStockReport = async (req, res) => {
  */
 export const getAllStoresStockReport = async (req, res) => {
     try {
-      const { startDate, endDate } = req.dateFilter || { 
-        startDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), // Default last 30 days
-        endDate: new Date() 
-      };
+        const { startDate, endDate } = req.dateFilter || { 
+            startDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), // Default last 30 days
+            endDate: new Date() 
+        };
       
-      // Format dates for SQL query
-      const formattedStartDate = startDate.toISOString().split('T')[0];
-      const formattedEndDate = endDate.toISOString().split('T')[0];
+        // Format dates for SQL query
+        const formattedStartDate = startDate.toISOString().split('T')[0];
+        const formattedEndDate = endDate.toISOString().split('T')[0];
       
-      // Get summary of stock movements by type and store
-      const movementsSummaryQuery = `
-        SELECT 
-          s.store_id,
-          s.name AS store_name,
-          sm.movement_type,
-          COUNT(sm.movement_id) AS movement_count,
-          SUM(sm.quantity) AS total_quantity,
-          SUM(sm.quantity * sm.unit_price) AS total_value
-        FROM stock_movements sm
-        JOIN stores s ON sm.store_id = s.store_id
-        WHERE sm.created_at BETWEEN $1 AND $2
-        GROUP BY s.store_id, s.name, sm.movement_type
-        ORDER BY s.name, sm.movement_type
-      `;
+        // Use a single query to fetch active stores information (used in multiple places)
+        const storesQuery = `SELECT store_id, name FROM stores WHERE is_active = true`;
+        const storesResult = await pool.query(storesQuery);
+        const activeStores = storesResult.rows;
+        const activeStoreIds = activeStores.map(store => store.store_id);
+        
+        // Execute all main queries in parallel using Promise.all
+        const [movementsSummary, inventoryResult, storeSummary, lowStockResult, salesSummary, systemTotals] = await Promise.all([
+            // Get summary of stock movements by type and store
+            pool.query(`
+                SELECT 
+                    s.store_id,
+                    s.name AS store_name,
+                    sm.movement_type,
+                    COUNT(sm.movement_id) AS movement_count,
+                    SUM(sm.quantity) AS total_quantity,
+                    SUM(sm.quantity * sm.unit_price) AS total_value
+                FROM stock_movements sm
+                JOIN stores s ON sm.store_id = s.store_id
+                WHERE sm.created_at BETWEEN $1 AND $2
+                    AND s.store_id = ANY($3)
+                GROUP BY s.store_id, s.name, sm.movement_type
+                ORDER BY s.name, sm.movement_type
+            `, [formattedStartDate, formattedEndDate, activeStoreIds]),
+            
+            // Get current inventory with materialized calculations
+            pool.query(`
+                WITH store_product_quantity AS (
+                    SELECT 
+                        sm.store_id,
+                        sm.product_id,
+                        SUM(CASE 
+                            WHEN sm.movement_type = 'STOCK_IN' THEN sm.quantity
+                            WHEN sm.movement_type IN ('SALE', 'MANUAL_REMOVAL') THEN -sm.quantity
+                            ELSE 0
+                        END) AS current_quantity
+                    FROM stock_movements sm
+                    WHERE sm.store_id = ANY($1)
+                    GROUP BY sm.store_id, sm.product_id
+                    HAVING SUM(CASE 
+                        WHEN sm.movement_type = 'STOCK_IN' THEN sm.quantity
+                        WHEN sm.movement_type IN ('SALE', 'MANUAL_REMOVAL') THEN -sm.quantity
+                        ELSE 0
+                    END) > 0
+                )
+                SELECT 
+                    s.store_id,
+                    s.name AS store_name,
+                    p.product_id,
+                    p.name AS product_name,
+                    p.category,
+                    p.sku,
+                    spq.current_quantity,
+                    p.unit_price,
+                    p.unit_price * spq.current_quantity AS inventory_value
+                FROM stores s
+                JOIN store_product_quantity spq ON s.store_id = spq.store_id
+                JOIN products p ON spq.product_id = p.product_id
+                WHERE s.store_id = ANY($1)
+                ORDER BY s.name, p.category, p.name
+            `, [activeStoreIds]),
+            
+            // Store inventory summary with optimized approach
+            pool.query(`
+                WITH store_product_quantity AS (
+                    SELECT 
+                        sm.store_id,
+                        sm.product_id,
+                        SUM(CASE 
+                            WHEN sm.movement_type = 'STOCK_IN' THEN sm.quantity
+                            WHEN sm.movement_type IN ('SALE', 'MANUAL_REMOVAL') THEN -sm.quantity
+                            ELSE 0
+                        END) AS current_quantity
+                    FROM stock_movements sm
+                    WHERE sm.store_id = ANY($1)
+                    GROUP BY sm.store_id, sm.product_id
+                    HAVING SUM(CASE 
+                        WHEN sm.movement_type = 'STOCK_IN' THEN sm.quantity
+                        WHEN sm.movement_type IN ('SALE', 'MANUAL_REMOVAL') THEN -sm.quantity
+                        ELSE 0
+                    END) > 0
+                ),
+                store_summary AS (
+                    SELECT 
+                        spq.store_id,
+                        COUNT(spq.product_id) AS product_count,
+                        SUM(p.unit_price * spq.current_quantity) AS total_inventory_value
+                    FROM store_product_quantity spq
+                    JOIN products p ON spq.product_id = p.product_id
+                    GROUP BY spq.store_id
+                )
+                SELECT 
+                    s.store_id,
+                    s.name AS store_name,
+                    COALESCE(ss.product_count, 0) AS product_count,
+                    COALESCE(ss.total_inventory_value, 0) AS total_inventory_value
+                FROM stores s
+                LEFT JOIN store_summary ss ON s.store_id = ss.store_id
+                WHERE s.store_id = ANY($1)
+                ORDER BY s.name
+            `, [activeStoreIds]),
+            
+            // Low stock items with the same CTE approach
+            pool.query(`
+                WITH store_product_quantity AS (
+                    SELECT 
+                        sm.store_id,
+                        sm.product_id,
+                        SUM(CASE 
+                            WHEN sm.movement_type = 'STOCK_IN' THEN sm.quantity
+                            WHEN sm.movement_type IN ('SALE', 'MANUAL_REMOVAL') THEN -sm.quantity
+                            ELSE 0
+                        END) AS current_quantity
+                    FROM stock_movements sm
+                    WHERE sm.store_id = ANY($1)
+                    GROUP BY sm.store_id, sm.product_id
+                    HAVING SUM(CASE 
+                        WHEN sm.movement_type = 'STOCK_IN' THEN sm.quantity
+                        WHEN sm.movement_type IN ('SALE', 'MANUAL_REMOVAL') THEN -sm.quantity
+                        ELSE 0
+                    END) > 0 
+                    AND SUM(CASE 
+                        WHEN sm.movement_type = 'STOCK_IN' THEN sm.quantity
+                        WHEN sm.movement_type IN ('SALE', 'MANUAL_REMOVAL') THEN -sm.quantity
+                        ELSE 0
+                    END) <= 10
+                )
+                SELECT 
+                    s.store_id,
+                    s.name AS store_name,
+                    p.product_id,
+                    p.name AS product_name,
+                    p.category,
+                    p.sku,
+                    spq.current_quantity
+                FROM stores s
+                JOIN store_product_quantity spq ON s.store_id = spq.store_id
+                JOIN products p ON spq.product_id = p.product_id
+                WHERE s.store_id = ANY($1)
+                ORDER BY s.name, p.category, p.name
+            `, [activeStoreIds]),
+            
+            // Sales summary with date range
+            pool.query(`
+                SELECT 
+                    s.store_id,
+                    s.name AS store_name,
+                    COUNT(sm.movement_id) AS transaction_count,
+                    SUM(sm.quantity) AS total_quantity_sold,
+                    SUM(sm.quantity * sm.unit_price) AS total_sales_value
+                FROM stock_movements sm
+                JOIN stores s ON sm.store_id = s.store_id
+                WHERE sm.movement_type = 'SALE'
+                    AND sm.created_at BETWEEN $1 AND $2
+                    AND s.store_id = ANY($3)
+                GROUP BY s.store_id, s.name
+                ORDER BY total_sales_value DESC
+            `, [formattedStartDate, formattedEndDate, activeStoreIds]),
+            
+            // System totals with optimized approach
+            pool.query(`
+                WITH product_inventory AS (
+                    SELECT 
+                        p.product_id,
+                        COALESCE(SUM(
+                            CASE 
+                                WHEN sm.movement_type = 'STOCK_IN' THEN sm.quantity
+                                WHEN sm.movement_type IN ('SALE', 'MANUAL_REMOVAL') THEN -sm.quantity
+                                ELSE 0
+                            END
+                        ), 0) AS total_quantity
+                    FROM products p
+                    LEFT JOIN stock_movements sm ON p.product_id = sm.product_id
+                    GROUP BY p.product_id
+                )
+                SELECT 
+                    (SELECT COUNT(*) FROM stores WHERE is_active = true) AS active_store_count,
+                    COUNT(DISTINCT CASE WHEN pi.total_quantity > 0 THEN p.product_id END) AS total_product_count,
+                    SUM(CASE WHEN pi.total_quantity > 0 THEN p.unit_price * pi.total_quantity ELSE 0 END) AS total_system_inventory_value
+                FROM products p
+                JOIN product_inventory pi ON p.product_id = pi.product_id
+            `)
+        ]);
       
-      const movementsSummary = await pool.query(movementsSummaryQuery, [formattedStartDate, formattedEndDate]);
-      
-      // Get current inventory across all stores
-      const inventoryQuery = `
-        SELECT 
-          s.store_id,
-          s.name AS store_name,
-          p.product_id,
-          p.name AS product_name,
-          p.category,
-          p.sku,
-          COALESCE(SUM(CASE 
-            WHEN sm.movement_type = 'STOCK_IN' THEN sm.quantity
-            WHEN sm.movement_type IN ('SALE', 'MANUAL_REMOVAL') THEN -sm.quantity
-            ELSE 0
-          END), 0) AS current_quantity,
-          p.unit_price,
-          p.unit_price * COALESCE(SUM(CASE 
-            WHEN sm.movement_type = 'STOCK_IN' THEN sm.quantity
-            WHEN sm.movement_type IN ('SALE', 'MANUAL_REMOVAL') THEN -sm.quantity
-            ELSE 0
-          END), 0) AS inventory_value
-        FROM stores s
-        CROSS JOIN products p
-        LEFT JOIN stock_movements sm ON s.store_id = sm.store_id AND p.product_id = sm.product_id
-        WHERE s.is_active = true
-        GROUP BY s.store_id, s.name, p.product_id, p.name, p.category, p.sku, p.unit_price
-        HAVING COALESCE(SUM(CASE 
-            WHEN sm.movement_type = 'STOCK_IN' THEN sm.quantity
-            WHEN sm.movement_type IN ('SALE', 'MANUAL_REMOVAL') THEN -sm.quantity
-            ELSE 0
-          END), 0) > 0
-        ORDER BY s.name, p.category, p.name
-      `;
-      
-      const inventoryResult = await pool.query(inventoryQuery);
-      
-      // Calculate summary by store
-      const storeInventorySummaryQuery = `
-        SELECT 
-          s.store_id,
-          s.name AS store_name,
-          COUNT(DISTINCT 
-            CASE WHEN COALESCE(SUM(CASE 
-              WHEN sm.movement_type = 'STOCK_IN' THEN sm.quantity
-              WHEN sm.movement_type IN ('SALE', 'MANUAL_REMOVAL') THEN -sm.quantity
-              ELSE 0
-            END), 0) > 0 THEN p.product_id ELSE NULL END
-          ) AS product_count,
-          SUM(
-            p.unit_price * COALESCE(SUM(CASE 
-              WHEN sm.movement_type = 'STOCK_IN' THEN sm.quantity
-              WHEN sm.movement_type IN ('SALE', 'MANUAL_REMOVAL') THEN -sm.quantity
-              ELSE 0
-            END), 0)
-          ) AS total_inventory_value
-        FROM stores s
-        CROSS JOIN products p
-        LEFT JOIN stock_movements sm ON s.store_id = sm.store_id AND p.product_id = sm.product_id
-        WHERE s.is_active = true
-        GROUP BY s.store_id, s.name
-        ORDER BY s.name
-      `;
-      
-      // Using a subquery to avoid nested aggregation error
-      const storeInventorySummaryQuery2 = `
-        SELECT 
-          s.store_id,
-          s.name AS store_name,
-          COUNT(active_products.product_id) AS product_count,
-          COALESCE(SUM(active_products.inventory_value), 0) AS total_inventory_value
-        FROM stores s
-        LEFT JOIN (
-          SELECT 
-            sm.store_id,
-            p.product_id,
-            p.unit_price * SUM(CASE 
-              WHEN sm.movement_type = 'STOCK_IN' THEN sm.quantity
-              WHEN sm.movement_type IN ('SALE', 'MANUAL_REMOVAL') THEN -sm.quantity
-              ELSE 0
-            END) AS inventory_value
-          FROM products p
-          JOIN stock_movements sm ON p.product_id = sm.product_id
-          GROUP BY sm.store_id, p.product_id, p.unit_price
-          HAVING SUM(CASE 
-            WHEN sm.movement_type = 'STOCK_IN' THEN sm.quantity
-            WHEN sm.movement_type IN ('SALE', 'MANUAL_REMOVAL') THEN -sm.quantity
-            ELSE 0
-          END) > 0
-        ) active_products ON s.store_id = active_products.store_id
-        WHERE s.is_active = true
-        GROUP BY s.store_id, s.name
-        ORDER BY s.name
-      `;
-      
-      const storeSummary = await pool.query(storeInventorySummaryQuery2);
-      
-      // Get low stock items across all stores
-      const lowStockQuery = `
-        SELECT 
-          s.store_id,
-          s.name AS store_name,
-          p.product_id,
-          p.name AS product_name,
-          p.category,
-          p.sku,
-          COALESCE(SUM(CASE 
-            WHEN sm.movement_type = 'STOCK_IN' THEN sm.quantity
-            WHEN sm.movement_type IN ('SALE', 'MANUAL_REMOVAL') THEN -sm.quantity
-            ELSE 0
-          END), 0) AS current_quantity
-        FROM stores s
-        CROSS JOIN products p
-        LEFT JOIN stock_movements sm ON s.store_id = sm.store_id AND p.product_id = sm.product_id
-        WHERE s.is_active = true
-        GROUP BY s.store_id, s.name, p.product_id, p.name, p.category, p.sku
-        HAVING COALESCE(SUM(CASE 
-            WHEN sm.movement_type = 'STOCK_IN' THEN sm.quantity
-            WHEN sm.movement_type IN ('SALE', 'MANUAL_REMOVAL') THEN -sm.quantity
-            ELSE 0
-          END), 0) > 0 
-          AND COALESCE(SUM(CASE 
-            WHEN sm.movement_type = 'STOCK_IN' THEN sm.quantity
-            WHEN sm.movement_type IN ('SALE', 'MANUAL_REMOVAL') THEN -sm.quantity
-            ELSE 0
-          END), 0) <= 10
-        ORDER BY s.name, p.category, p.name
-      `;
-      
-      const lowStockResult = await pool.query(lowStockQuery);
-      
-      // Calculate total sales within date range
-      const salesSummaryQuery = `
-        SELECT 
-          s.store_id,
-          s.name AS store_name,
-          COUNT(sm.movement_id) AS transaction_count,
-          SUM(sm.quantity) AS total_quantity_sold,
-          SUM(sm.quantity * sm.unit_price) AS total_sales_value
-        FROM stock_movements sm
-        JOIN stores s ON sm.store_id = s.store_id
-        WHERE sm.movement_type = 'SALE'
-          AND sm.created_at BETWEEN $1 AND $2
-        GROUP BY s.store_id, s.name
-        ORDER BY total_sales_value DESC
-      `;
-      
-      const salesSummary = await pool.query(salesSummaryQuery, [formattedStartDate, formattedEndDate]);
-      
-      // Calculate system-wide totals
-      const systemTotalsQuery = `
-        SELECT 
-          (SELECT COUNT(*) FROM stores WHERE is_active = true) AS active_store_count,
-          COUNT(DISTINCT p.product_id) AS total_product_count,
-          SUM(
-            p.unit_price * COALESCE((
-              SELECT SUM(CASE 
-                WHEN movement_type = 'STOCK_IN' THEN quantity
-                WHEN movement_type IN ('SALE', 'MANUAL_REMOVAL') THEN -quantity
-                ELSE 0
-              END)
-              FROM stock_movements
-              WHERE product_id = p.product_id
-            ), 0)
-          ) AS total_system_inventory_value
-        FROM products p
-      `;
-      
-      const systemTotals = await pool.query(systemTotalsQuery);
-      
-      // Compile comprehensive report
-      const stockReport = {
-        success: true,
-        dateRange: {
-          startDate: formattedStartDate,
-          endDate: formattedEndDate
-        },
-        systemSummary: {
-          activeStores: systemTotals.rows[0]?.active_store_count || 0,
-          totalProducts: systemTotals.rows[0]?.total_product_count || 0,
-          totalInventoryValue: Number(systemTotals.rows[0]?.total_system_inventory_value || 0).toFixed(2)
-        },
-        stores: storeSummary.rows.map(store => ({
-          id: store.store_id,
-          name: store.store_name,
-          productCount: Number(store.product_count),
-          inventoryValue: Number(store.total_inventory_value).toFixed(2),
-          salesSummary: salesSummary.rows.find(s => s.store_id === store.store_id) ? {
-            transactionCount: Number(salesSummary.rows.find(s => s.store_id === store.store_id).transaction_count),
-            quantitySold: Number(salesSummary.rows.find(s => s.store_id === store.store_id).total_quantity_sold),
-            salesValue: Number(salesSummary.rows.find(s => s.store_id === store.store_id).total_sales_value).toFixed(2)
-          } : {
-            transactionCount: 0,
-            quantitySold: 0,
-            salesValue: "0.00"
-          },
-          movementsSummary: movementsSummary.rows
-            .filter(m => m.store_id === store.store_id)
-            .map(m => ({
-              type: m.movement_type,
-              count: Number(m.movement_count),
-              quantity: Number(m.total_quantity),
-              value: Number(m.total_value).toFixed(2)
+        // Compile the report with the same structure as before
+        const stockReport = {
+            success: true,
+            dateRange: {
+                startDate: formattedStartDate,
+                endDate: formattedEndDate
+            },
+            systemSummary: {
+                activeStores: systemTotals.rows[0]?.active_store_count || 0,
+                totalProducts: systemTotals.rows[0]?.total_product_count || 0,
+                totalInventoryValue: Number(systemTotals.rows[0]?.total_system_inventory_value || 0).toFixed(2)
+            },
+            stores: storeSummary.rows.map(store => ({
+                id: store.store_id,
+                name: store.store_name,
+                productCount: Number(store.product_count),
+                inventoryValue: Number(store.total_inventory_value).toFixed(2),
+                salesSummary: salesSummary.rows.find(s => s.store_id === store.store_id) ? {
+                    transactionCount: Number(salesSummary.rows.find(s => s.store_id === store.store_id).transaction_count),
+                    quantitySold: Number(salesSummary.rows.find(s => s.store_id === store.store_id).total_quantity_sold),
+                    salesValue: Number(salesSummary.rows.find(s => s.store_id === store.store_id).total_sales_value).toFixed(2)
+                } : {
+                    transactionCount: 0,
+                    quantitySold: 0,
+                    salesValue: "0.00"
+                },
+                movementsSummary: movementsSummary.rows
+                    .filter(m => m.store_id === store.store_id)
+                    .map(m => ({
+                        type: m.movement_type,
+                        count: Number(m.movement_count),
+                        quantity: Number(m.total_quantity),
+                        value: Number(m.total_value).toFixed(2)
+                    })),
+                lowStockItems: lowStockResult.rows
+                    .filter(item => item.store_id === store.store_id)
+                    .map(item => ({
+                        productId: item.product_id,
+                        name: item.product_name,
+                        sku: item.sku,
+                        category: item.category,
+                        currentQuantity: Number(item.current_quantity)
+                    }))
             })),
-          lowStockItems: lowStockResult.rows
-            .filter(item => item.store_id === store.store_id)
-            .map(item => ({
-              productId: item.product_id,
-              name: item.product_name,
-              sku: item.sku,
-              category: item.category,
-              currentQuantity: Number(item.current_quantity)
+            inventory: inventoryResult.rows.map(item => ({
+                storeId: item.store_id,
+                storeName: item.store_name,
+                productId: item.product_id,
+                productName: item.product_name,
+                category: item.category,
+                sku: item.sku,
+                quantity: Number(item.current_quantity),
+                unitPrice: Number(item.unit_price).toFixed(2),
+                value: Number(item.inventory_value).toFixed(2)
             }))
-        })),
-        inventory: inventoryResult.rows.map(item => ({
-          storeId: item.store_id,
-          storeName: item.store_name,
-          productId: item.product_id,
-          productName: item.product_name,
-          category: item.category,
-          sku: item.sku,
-          quantity: Number(item.current_quantity),
-          unitPrice: Number(item.unit_price).toFixed(2),
-          value: Number(item.inventory_value).toFixed(2)
-        }))
-      };
+        };
       
-      res.status(200).json(stockReport);
+        res.status(200).json(stockReport);
     } catch (error) {
-      console.error("Error fetching system-wide stock report:", error);
-      res.status(500).json({ 
-        success: false,
-        error: "Server error while generating system-wide stock report" 
-      });
+        console.error("Error fetching system-wide stock report:", error);
+        res.status(500).json({ 
+            success: false,
+            error: "Server error while generating system-wide stock report" 
+        });
     }
 };

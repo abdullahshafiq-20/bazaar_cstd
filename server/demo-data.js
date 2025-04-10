@@ -7,7 +7,7 @@ const insertDemoData = async () => {
     
     // Insert stores (500 stores)
     let storeValues = [];
-    for (let i = 1; i <= 500; i++) {
+    for (let i = 1; i <= 200; i++) {
       storeValues.push(`('Store ${i}', 'Address ${i}', '123-456-78${i % 10}', 'store${i}@example.com')`);
     }
     const storeRes = await pool.query(
@@ -17,7 +17,7 @@ const insertDemoData = async () => {
     
     // Insert products (100 product catalogs)
     let productValues = [];
-    for (let i = 1; i <= 100; i++) {
+    for (let i = 1; i <= 60; i++) {
       productValues.push(`('Product ${i}', 'Description for product ${i}', 'SKU${i}', 'Category ${i % 10}', ${Math.floor(Math.random() * 1000) + 50})`);
     }
     const productRes = await pool.query(
@@ -26,7 +26,7 @@ const insertDemoData = async () => {
     const productIds = productRes.rows.map(row => row.product_id);
     
     // Insert users (store managers, 500 managers)
-    for (let i = 0; i < 500; i++) {
+    for (let i = 0; i < 200; i++) {
       const salt = await bcrypt.genSalt(10);
       const passwordHash = await bcrypt.hash(`manager${i + 1}Password`, salt);
       
