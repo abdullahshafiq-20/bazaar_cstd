@@ -12,4 +12,5 @@ inventoryRouter.get('/inventory/alerts', getInventoryAlerts);
 inventoryRouter.get('/inventory/value', getInventoryValue);
 
 
+
 export default inventoryRouter;
