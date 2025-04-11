@@ -6,21 +6,31 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node app.js",
-    "dev": "nodemon app.js"
+    "dev": "nodemon app.js",
+    "docker:build": "docker build -t bazaar-cstd .",
+    "docker:dev": "docker-compose up",
+    "docker:prod": "docker-compose -f docker-compose.prod.yml up -d",
+    "docker:down": "docker-compose down",
+    "docker:prod:down": "docker-compose -f docker-compose.prod.yml down"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "amqplib": "^0.10.7",
     "bcrypt": "^5.1.1",
     "cors": "^2.8.5",
+    "docker": "^1.0.0",
+    "docker-compose": "^1.2.0",
     "dotenv": "^16.4.7",
     "express": "^5.1.0",
     "jsonwebtoken": "^9.0.2",
+    "nginx": "^1.0.8",
     "nodemon": "^3.1.9",
     "pg": "^8.14.1",
     "swagger-jsdoc": "^6.2.8",
-    "swagger-ui-express": "^5.0.1"
+    "swagger-ui-express": "^5.0.1",
+    "uuid": "^11.1.0"
   }
 }
