@@ -1,4 +1,5 @@
 import pool from '../config/pool.js';
+import messageProducer from '../services/messageProducer.js';
 
 /**
  * @swagger
@@ -229,6 +230,14 @@ export const createProduct = async (req, res) => {
     try {
         const result = await pool.query(query, values);
         const productId = result.rows[0].product_id;
+        const productCreated = result.rows[0];
+
+        await messageProducer.publishProductCreated(
+            productId.product_id,
+            productCreated.name,
+            productCreated.category,
+            productCreated.unit_price
+        );
         res.status(201).json({ message: 'Product created successfully', productId });
     } catch (error) {
         console.error('Error creating product:', error);
@@ -465,6 +474,14 @@ export const updateProduct = async (req, res) => {
         
         // Execute the update
         const result = await pool.query(updateQuery, queryParams);
+        const updatedProduct = result.rows[0];
+
+        await messageProducer.publishProductUpdated(
+            updatedProduct.product_id,
+            updatedProduct.name,
+            updatedProduct.category,
+            updatedProduct.unit_price
+        );
         
         res.json({
             message: 'Product updated successfully',

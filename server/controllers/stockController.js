@@ -1,4 +1,6 @@
 import pool from '../config/pool.js';
+import messageProducer from '../services/messageProducer.js';
+
 
 /**
  * @swagger
@@ -339,6 +341,14 @@ export const addStock = async (req, res) => {
         `;
         
         const stockResult = await pool.query(stockQuery, [product_id, storeId]);
+
+        await messageProducer.publishStockAdded(
+            storeId,
+            product_id,
+            quantity,
+            unit_price || productResult.rows[0].unit_price,
+            parseInt(stockResult.rows[0].current_stock)
+        );
         
         res.status(201).json({
             message: 'Stock added successfully',
@@ -620,6 +630,15 @@ export const manualRemoval = async (req, res) => {
         ];
         
         const result = await pool.query(insertQuery, values);
+
+        await messageProducer.publishStockRemoved(
+            storeId,
+            product_id,
+            quantity,
+            reason || 'Manual removal',
+            parseInt(updatedStockResult.rows[0].current_stock)
+        );
+        
         
         res.status(201).json({
             message: 'Stock removed successfully',

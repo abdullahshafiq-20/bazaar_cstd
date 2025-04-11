@@ -1,59 +1,67 @@
 import amqp from 'amqplib';
-import dotenv from 'dotenv';
-dotenv.config();
 
 // Connection variables
 let connection = null;
 let channel = null;
 
-// Exchange names
+// RabbitMQ configuration
+const RABBITMQ_URL = process.env.RABBITMQ_URL || 'amqp://localhost:5672';
+const RECONNECT_TIMEOUT = 5000; // 5 seconds
+
+// Exchange definitions
 export const EXCHANGES = {
   INVENTORY: 'inventory',
-  STORE: 'store',
-  PRODUCT: 'product'
+  PRODUCT: 'product',
+  ORDER: 'order'
 };
 
-// Routing keys
+// Routing key definitions
 export const ROUTING_KEYS = {
   STOCK_ADDED: 'stock.added',
   STOCK_REMOVED: 'stock.removed',
   PRODUCT_CREATED: 'product.created',
-  PRODUCT_UPDATED: 'product.updated',
-  STORE_CREATED: 'store.created'
+  PRODUCT_UPDATED: 'product.updated'
 };
 
-// Connect to RabbitMQ
-const connectRabbitMQ = async () => {
+// Connect to RabbitMQ with retry mechanism
+export const connectRabbitMQ = async () => {
   try {
-    connection = await amqp.connect(process.env.RABBITMQ_URL || 'amqp://localhost');
-    channel = await connection.createChannel();
+    console.log(`Connecting to RabbitMQ at ${RABBITMQ_URL}...`);
+    connection = await amqp.connect(RABBITMQ_URL);
     
-    // Create exchanges
-    await channel.assertExchange(EXCHANGES.INVENTORY, 'topic', { durable: true });
-    await channel.assertExchange(EXCHANGES.STORE, 'topic', { durable: true });
-    await channel.assertExchange(EXCHANGES.PRODUCT, 'topic', { durable: true });
-    
-    console.log('Connected to RabbitMQ');
-    
-    // Handle connection close
     connection.on('error', (err) => {
       console.error('RabbitMQ connection error:', err);
-      setTimeout(connectRabbitMQ, 5000);
+      setTimeout(reconnect, RECONNECT_TIMEOUT);
     });
     
     connection.on('close', () => {
-      console.log('RabbitMQ connection closed. Reconnecting...');
-      setTimeout(connectRabbitMQ, 5000);
+      console.error('RabbitMQ connection closed unexpectedly');
+      setTimeout(reconnect, RECONNECT_TIMEOUT);
     });
     
-    return { connection, channel };
+    channel = await connection.createChannel();
+    
+    // Assert exchanges exist
+    for (const exchange of Object.values(EXCHANGES)) {
+      await channel.assertExchange(exchange, 'topic', { durable: true });
+    }
+    
+    console.log('Successfully connected to RabbitMQ');
+    return true;
   } catch (error) {
-    console.error('RabbitMQ connection failed:', error);
-    setTimeout(connectRabbitMQ, 5000);
+    console.error('Failed to connect to RabbitMQ:', error);
+    setTimeout(reconnect, RECONNECT_TIMEOUT);
+    return false;
   }
 };
 
-// Get connection and channel (creates if doesn't exist)
+// Reconnection function
+async function reconnect() {
+  console.log('Attempting to reconnect to RabbitMQ...');
+  await connectRabbitMQ();
+}
+
+// Get channel (with connection check)
 export const getChannel = async () => {
   if (!channel) {
     await connectRabbitMQ();
@@ -61,7 +69,14 @@ export const getChannel = async () => {
   return channel;
 };
 
-// Initialize connection when the app starts
-connectRabbitMQ();
+// Close connection
+export const closeConnection = async () => {
+  if (connection) {
+    await connection.close();
+    connection = null;
+    channel = null;
+  }
+};
 
-export default { getChannel, EXCHANGES, ROUTING_KEYS };
+// Initialize connection on module import
+connectRabbitMQ().catch(console.error);

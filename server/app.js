@@ -10,15 +10,38 @@ import adminRouter from "./routes/adminRoutes.js";
 import { setupSwagger } from './config/swagger.js';
 import cors from "cors";
 import { rateLimiter } from "./middleware/rateLimiter.js";
+import { initializeInventoryEventHandlers } from './services/inventoryEventHandler.js';
+
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 setupSwagger(app);
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, async () => {
     console.log(`Server is running on port ${PORT}`);
+    
+    // Initialize event handlers
+    try {
+        await initializeInventoryEventHandlers();
+        console.log('Event handlers initialized successfully');
+    } catch (error) {
+        console.error('Failed to initialize event handlers:', error);
+    }
 });
+
+process.on('SIGTERM', () => {
+    console.log('SIGTERM signal received: closing HTTP server');
+    server.close(() => {
+        console.log('HTTP server closed');
+    });
+});
+process.on('SIGINT', () => {
+    console.log('SIGINT signal received: closing HTTP server');
+    server.close(() => {
+        console.log('HTTP server closed');
+    });
+})
 
 // Basic route, doesn't need rate limiting
 app.get("/", (req, res) => {

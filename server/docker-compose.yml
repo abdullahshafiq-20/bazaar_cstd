@@ -19,6 +19,10 @@ services:
       - RATE_LIMIT_WINDOW_MS=${RATE_LIMIT_WINDOW_MS:-60000}
       - RATE_LIMIT_MAX_REQUESTS=${RATE_LIMIT_MAX_REQUESTS:-100}
       - RABBITMQ_URL=amqp://rabbitmq:5672
+
+    command:
+      sh -c "npm install amqplib uuid &&
+             node app.js"
     depends_on:
       - db
       - rabbitmq

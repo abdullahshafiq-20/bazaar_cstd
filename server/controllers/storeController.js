@@ -1,4 +1,5 @@
 import pool from '../config/pool.js';
+import messageProducer from '../services/messageProducer.js';
 
 /**
  * @swagger
@@ -563,6 +564,13 @@ export const createStore = async (req, res) => {
       'INSERT INTO stores (name, address, phone, email, is_active) VALUES ($1, $2, $3, $4, $5) RETURNING *',
       [name, address, phone, email, is_active !== undefined ? is_active : true]
     );
+
+    const newStore = result.rows[0];
+    await messageProducer.publishStoreCreated(
+      newStore.store_id,
+      newStore.name,
+      newStore.address
+  );
     
     res.status(201).json({
       success: true,
