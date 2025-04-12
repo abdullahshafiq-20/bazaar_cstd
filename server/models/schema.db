@@ -101,4 +101,179 @@ CREATE TABLE user_roles (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- VERSION 3: Sacalable (1000 stores)
+-- ==========================================
+-- Create table for inventory events
+CREATE TABLE IF NOT EXISTS inventory_events (
+  event_id SERIAL PRIMARY KEY,
+  event_type VARCHAR(50) NOT NULL,
+  store_id INTEGER NOT NULL REFERENCES stores(store_id),
+  product_id INTEGER NOT NULL REFERENCES products(product_id),
+  quantity INTEGER NOT NULL,
+  unit_price NUMERIC(10, 2),
+  event_date TIMESTAMP NOT NULL,
+  metadata JSONB,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 
+-- Create table for inventory alerts
+CREATE TABLE IF NOT EXISTS inventory_alerts (
+  alert_id SERIAL PRIMARY KEY,
+  store_id INTEGER NOT NULL REFERENCES stores(store_id),
+  product_id INTEGER NOT NULL REFERENCES products(product_id),
+  alert_type VARCHAR(50) NOT NULL,
+  threshold INTEGER NOT NULL,
+  current_value INTEGER NOT NULL,
+  alert_date TIMESTAMP NOT NULL,
+  resolved BOOLEAN DEFAULT FALSE,
+  resolved_date TIMESTAMP,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create table for product catalog events
+CREATE TABLE IF NOT EXISTS product_catalog_events (
+  event_id SERIAL PRIMARY KEY,
+  event_type VARCHAR(50) NOT NULL,
+  product_id INTEGER NOT NULL REFERENCES products(product_id),
+  name VARCHAR(255) NOT NULL,
+  category VARCHAR(100),
+  event_date TIMESTAMP NOT NULL,
+  metadata JSONB,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Add indexes for performance
+CREATE INDEX IF NOT EXISTS idx_inventory_events_store_product ON inventory_events (store_id, product_id);
+CREATE INDEX IF NOT EXISTS idx_inventory_events_event_type ON inventory_events (event_type);
+CREATE INDEX IF NOT EXISTS idx_inventory_alerts_store_product ON inventory_alerts (store_id, product_id);
+CREATE INDEX IF NOT EXISTS idx_inventory_alerts_type ON inventory_alerts (alert_type);
+CREATE INDEX IF NOT EXISTS idx_product_catalog_events_product ON product_catalog_events (product_id);
+
+
+-- Create audit table to track changes across the system
+CREATE TABLE IF NOT EXISTS audit_logs (
+  audit_id SERIAL PRIMARY KEY,
+  table_name VARCHAR(50) NOT NULL,
+  record_id INTEGER NOT NULL,
+  operation VARCHAR(20) NOT NULL, -- 'INSERT', 'UPDATE', 'DELETE'
+  old_data JSONB,
+  new_data JSONB,
+  user_id INTEGER REFERENCES users(user_id),
+  ip_address VARCHAR(45),
+  user_agent TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Add index for better query performance
+CREATE INDEX IF NOT EXISTS idx_audit_logs_table_record ON audit_logs (table_name, record_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_user ON audit_logs (user_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs (created_at);
+
+-- Create generic audit trigger function
+CREATE OR REPLACE FUNCTION process_audit()
+RETURNS TRIGGER AS $$
+DECLARE
+    audit_user_id INTEGER;
+    audit_user_name VARCHAR(100);
+    audit_ip VARCHAR(45);
+    audit_user_agent TEXT;
+    audit_row JSONB;
+    record_id_value INTEGER;
+BEGIN
+    -- Get user_id from session variables
+    BEGIN
+        audit_user_id := nullif(current_setting('app.current_user_id', true), '')::INTEGER;
+    EXCEPTION
+        WHEN OTHERS THEN
+            audit_user_id := NULL;
+    END;
+    
+    -- Get user_name from session variables
+    BEGIN
+        audit_user_name := nullif(current_setting('app.current_user_name', true), '');
+    EXCEPTION
+        WHEN OTHERS THEN
+            audit_user_name := NULL;
+    END;
+    
+    -- Get IP address from session variable
+    BEGIN
+        audit_ip := nullif(current_setting('app.client_ip', true), '');
+    EXCEPTION
+        WHEN OTHERS THEN
+            audit_ip := NULL;
+    END;
+    
+    -- Get user agent from session variable
+    BEGIN
+        audit_user_agent := nullif(current_setting('app.user_agent', true), '');
+    EXCEPTION
+        WHEN OTHERS THEN
+            audit_user_agent := NULL;
+    END;
+
+    -- Determine the record_id dynamically based on table
+    IF TG_TABLE_NAME = 'products' THEN
+        record_id_value := CASE WHEN TG_OP = 'DELETE' THEN OLD.product_id ELSE NEW.product_id END;
+    ELSIF TG_TABLE_NAME = 'stock_movements' THEN
+        record_id_value := CASE WHEN TG_OP = 'DELETE' THEN OLD.movement_id ELSE NEW.movement_id END;
+    ELSIF TG_TABLE_NAME = 'stores' THEN
+        record_id_value := CASE WHEN TG_OP = 'DELETE' THEN OLD.store_id ELSE NEW.store_id END;
+    ELSIF TG_TABLE_NAME = 'users' THEN
+        record_id_value := CASE WHEN TG_OP = 'DELETE' THEN OLD.user_id ELSE NEW.user_id END;
+    ELSIF TG_TABLE_NAME = 'inventory_events' THEN
+        record_id_value := CASE WHEN TG_OP = 'DELETE' THEN OLD.event_id ELSE NEW.event_id END;
+    ELSIF TG_TABLE_NAME = 'inventory_alerts' THEN
+        record_id_value := CASE WHEN TG_OP = 'DELETE' THEN OLD.alert_id ELSE NEW.alert_id END;
+    ELSIF TG_TABLE_NAME = 'product_catalog_events' THEN
+        record_id_value := CASE WHEN TG_OP = 'DELETE' THEN OLD.event_id ELSE NEW.event_id END;
+    ELSIF TG_TABLE_NAME = 'user_roles' THEN
+        record_id_value := CASE WHEN TG_OP = 'DELETE' THEN OLD.user_role_id ELSE NEW.user_role_id END;
+    ELSE
+        -- Default case if table not explicitly handled
+        record_id_value := NULL;
+    END IF;
+
+    IF (TG_OP = 'DELETE') THEN
+        audit_row = row_to_json(OLD)::JSONB;
+        INSERT INTO audit_logs
+            (table_name, record_id, operation, old_data, new_data, user_id, user_name, ip_address, user_agent)
+        VALUES
+            (TG_TABLE_NAME, record_id_value, TG_OP, audit_row, NULL, audit_user_id, audit_user_name, audit_ip, audit_user_agent);
+        RETURN OLD;
+    ELSIF (TG_OP = 'UPDATE') THEN
+        audit_row = row_to_json(NEW)::JSONB;
+        INSERT INTO audit_logs
+            (table_name, record_id, operation, old_data, new_data, user_id, user_name, ip_address, user_agent)
+        VALUES
+            (TG_TABLE_NAME, record_id_value, TG_OP, row_to_json(OLD)::JSONB, audit_row, audit_user_id, audit_user_name, audit_ip, audit_user_agent);
+        RETURN NEW;
+    ELSIF (TG_OP = 'INSERT') THEN
+        audit_row = row_to_json(NEW)::JSONB;
+        INSERT INTO audit_logs
+            (table_name, record_id, operation, old_data, new_data, user_id, user_name, ip_address, user_agent)
+        VALUES
+            (TG_TABLE_NAME, record_id_value, TG_OP, NULL, audit_row, audit_user_id, audit_user_name, audit_ip, audit_user_agent);
+        RETURN NEW;
+    END IF;
+    RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+-- Apply triggers to key tables
+CREATE TRIGGER products_audit
+AFTER INSERT OR UPDATE OR DELETE ON products
+FOR EACH ROW EXECUTE FUNCTION process_audit();
+
+CREATE TRIGGER stock_movements_audit
+AFTER INSERT OR UPDATE OR DELETE ON stock_movements
+FOR EACH ROW EXECUTE FUNCTION process_audit();
+
+CREATE TRIGGER stores_audit
+AFTER INSERT OR UPDATE OR DELETE ON stores
+FOR EACH ROW EXECUTE FUNCTION process_audit();
+
+CREATE TRIGGER users_audit
+AFTER INSERT OR UPDATE OR DELETE ON users
+FOR EACH ROW EXECUTE FUNCTION process_audit();
+
+ALTER TABLE audit_logs ADD COLUMN user_name VARCHAR(100);

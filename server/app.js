@@ -8,10 +8,12 @@ import authRouter from "./routes/authRoutes.js";
 import storeRouter from "./routes/storeRoutes.js";
 import adminRouter from "./routes/adminRoutes.js";
 import debudRouter from "./routes/debugRoutes.js";
+import auditRouter from './routes/auditRoutes.js';
 import { setupSwagger } from './config/swagger.js';
 import cors from "cors";
 import { rateLimiter } from "./middleware/rateLimiter.js";
 import { initializeInventoryEventHandlers } from './services/inventoryEventHandler.js';
+import setAuditUser from './middleware/auditMiddleware.js';
 
 dotenv.config();
 
@@ -67,6 +69,10 @@ app.use(express.urlencoded({ extended: true }));
 
 // Apply rate limiting to all API routes
 app.use("/api", rateLimiter);
+
+// Apply the audit middleware after verifyToken middleware
+app.use(setAuditUser);
+
 app.use("/api/debug", debudRouter);
 // Route registration
 app.use("/api", productRouter);
@@ -75,5 +81,6 @@ app.use("/api", inventoryRouter);
 app.use("/api", authRouter);
 app.use("/api", storeRouter);
 app.use("/api", adminRouter);
+app.use('/api', auditRouter);
 
 export default app;
