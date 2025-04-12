@@ -7,6 +7,7 @@ import inventoryRouter from "./routes/inventoryRoutes.js";
 import authRouter from "./routes/authRoutes.js";
 import storeRouter from "./routes/storeRoutes.js";
 import adminRouter from "./routes/adminRoutes.js";
+import debudRouter from "./routes/debugRoutes.js";
 import { setupSwagger } from './config/swagger.js';
 import cors from "cors";
 import { rateLimiter } from "./middleware/rateLimiter.js";
@@ -66,7 +67,7 @@ app.use(express.urlencoded({ extended: true }));
 
 // Apply rate limiting to all API routes
 app.use("/api", rateLimiter);
-
+app.use("/api/debug", debudRouter);
 // Route registration
 app.use("/api", productRouter);
 app.use("/api", stockRouter);
