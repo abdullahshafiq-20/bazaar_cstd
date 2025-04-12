@@ -1,6 +1,7 @@
 import axios from 'axios';
 
-const baseURL = 'http://127.0.0.1:3000/api';
+
+const baseURL = process.env.VITE_API_URL || 'http://localhost:3000/api';
 
 const api = axios.create({
   baseURL,
