@@ -15,6 +15,16 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 setupSwagger(app);
+app.use(cors({ 
+    origin: [
+      'http://localhost:3000',
+      'http://localhost:5173',
+      'https://bazaar-cstd-frontend-v2.vercel.app'
+    ].filter(Boolean),
+    credentials: true // Important for cookies/sessions
+  }));
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
