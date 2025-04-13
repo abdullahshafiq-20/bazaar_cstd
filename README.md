@@ -1,452 +1,273 @@
-# BazaarCSTD - Inventory Tracking System
+# Note
 
-## Overview
+The V1 and V2 versions of BazaarCSTD, along with their respective frontend and backend implementations, have already been deployed with client-side integration using React. Each version includes a dedicated frontend interface for interacting with the respective API endpoints.
 
-BazaarCSTD is an evolving inventory tracking system designed to scale from a single kiryana store to thousands of retail locations. The system tracks product stock-in, sales, and manual removals while providing real-time stock visibility. This document details the design decisions, assumptions, API design, and evolution rationale across three major versions.
-
-## Table of Contents
-
-- [Design Decisions](#design-decisions)
-- [Data Modeling](#data-modeling)
-- [Architecture](#architecture)
-- [Technology Stack](#technology-stack)
-- [Security](#security)
-- [Scalability](#scalability)
-- [Assumptions](#assumptions)
-- [API Design](#api-design)
-- [Evolution Rationale (V1 → V3)](#evolution-rationale-v1-→-v3)
-  - [Version 1: Single Store](#version-1-single-store)
-  - [Version 2: Multi-Store (500+ Stores)](#version-2-multi-store-500-stores)
-  - [Version 3: Scalable System (1000+ Stores)](#version-3-scalable-system-1000-stores)
-- [Technical Architecture](#technical-architecture)
-- [Database Schema Evolution](#database-schema-evolution)
-- [Middleware Implementation](#middleware-implementation)
-- [System Components](#system-components)
-- [Trade-offs and Considerations](#trade-offs-and-considerations)
+> 🗃️ **All versions have their databases pre-populated with random demo data** for immediate testing and validation of system features.
 
 ---
 
-## Design Decisions
+### V1 - Single Store Deployment
 
-### Data Modeling
+The V1 version is designed for a single-store use case and does **not include authentication**. You may perform the following operations directly:
+- Product creation, deletion, and updates
+- Stock sale, addition, and manual removal
+- View overall inventory dashboard
 
-The core design decision for BazaarCSTD's data model is using an event-based approach to track inventory. Rather than storing mutable current quantities, we record all inventory movements as immutable events, calculating current stock levels by aggregating these events.
+This version simulates the simplest inventory tracking workflow without user roles.
 
-**Benefits of this approach:**
-
-- Complete audit trail of all inventory changes  
-- Ability to reconstruct inventory state at any point in time  
-- Data integrity through immutable events  
-- Support for complex reporting and analytics  
-
-This event sourcing pattern is implemented through the `stock_movements` table, which records every inventory change with its type, quantity, and timestamp.
-
----
-
-## Architecture
-
-The system architecture evolves significantly across versions:
-
-### V1: Monolithic Application
-
-- Single Node.js/Express.js application  
-- Direct PostgreSQL database connections  
-- Synchronous processing model  
-
-### V2: Enhanced Monolith
-
-- Multi-store support with authentication  
-- Role-based access control  
-- Basic request throttling  
-
-### V3: Distributed System
-
-- Horizontally scalable stateless API nodes  
-- Event-driven architecture with RabbitMQ  
-- Redis caching and rate limiting  
-- Read/write separation with connection pools  
+#### V1 Links:
+- **Frontend**: [V1 Frontend](https://bazaar-cstd-frontedn-v1.vercel.app/)
+- **Backend API**: [V1 Backend API](https://bazaar-backend-v1.vercel.app/)
+- **Swagger API Docs**: [V1 Swagger API Documentation](https://res.cloudinary.com/dkb1rdtmv/image/upload/v1744489469/V1-API-CLOSED_ihpkvf.pdf)
 
 ---
 
-## Technology Stack
+### V2 - Multi-Store Deployment with Authentication
 
-### Backend Framework:
+Authentication has been implemented in V2, and role-based access is enforced. Below are sample credentials for login:
 
-- Node.js with Express.js for RESTful API development  
-- PostgreSQL for data storage  
-- RabbitMQ for asynchronous message processing (V3)  
-- Redis for caching and rate limiting (V3)  
-- Docker for containerization (V3)  
-- Nginx for load balancing (V3)  
+#### Admin Credentials:
+- **Username**: `admin`
+- **Password**: `admin`
 
-### Key Libraries:
+#### Manager Credentials:
+- **Username**: `manager1`
+- **Password**: `manager1Password`
 
-- bcrypt for password hashing  
-- jsonwebtoken for JWT-based authentication  
-- pg for PostgreSQL connectivity  
-- amqplib for RabbitMQ integration  
-- redis for caching implementation  
+You may also use usernames such as `manager2`, `manager3`, etc., with passwords in the format: `managerXPassword`.
 
----
+#### Role-Based Capabilities:
+- **Admin**
+  - Add, delete, and update products (central product catalog)
+  - Assign and remove store assignments for managers
+  - View full access dashboards, including inventory, audit logs, and alerts
+  - Create new managers (via client-side interface)
+- **Store Manager**
+  - Assigned to one or more stores
+  - Manage store dashboard including stock operations (additions, sales, alerts)
+  - Cannot log in without store assignment
+  - View shop-specific audit logs, stock levels, revenue, and other details
 
-## Security
+> Note: The frontend UI in V2 is intentionally minimal, as the primary focus was on backend infrastructure and functionality.
 
-Security measures evolve across versions:
-
-### V1:
-
-- Basic input validation  
-- SQL injection prevention with parameterized queries  
-
-### V2:
-
-- JWT-based authentication  
-- Role-based access control  
-- Password hashing with bcrypt  
-- Basic rate limiting  
-
-### V3:
-
-- Enhanced rate limiting with Redis  
-- Distributed token validation  
-- Comprehensive audit logging  
-- Encrypted connections  
+#### V2 Links:
+- **Frontend**: [V2 Frontend](https://bazaar-cstd-frontend-v2.vercel.app/)
+- **Backend API**: [V2 Backend API](https://bazaar-cstd-backend-v2.vercel.app/)
+- **Swagger API Docs**: [V2 Swagger API Documentation](https://res.cloudinary.com/dkb1rdtmv/image/upload/v1744489469/V2-API-CLOSED_azdxjl.pdf)
 
 ---
 
-## Scalability
+### V3 - Enterprise Version (Local Only)
 
-Scalability strategies increase in sophistication:
+The V3 version has been implemented **locally only** due to the infrastructure costs associated with deploying enterprise-grade features, such as:
+- Dedicated read/write databases
+- Message queues
+- Distributed caching
 
-### V1:
+Though deployment and frontend integration were not part of the challenge scope, it is important to note that real scalability and performance evaluation can only be accurately performed in a deployed environment.
 
-- Database connection pooling  
-- Efficient queries for single-store operations  
-
-### V2:
-
-- Enhanced indexing for multi-store queries  
-- Query optimization for filtering operations  
-
-### V3:
-
-- Horizontal scaling with stateless services  
-- Caching for frequently accessed data  
-- Asynchronous processing for non-critical operations  
-- Read/write separation to optimize database access  
-- Database partitioning for large tables  
+#### V3 Links:
+- **Swagger API Docs (Extended)**: [V3 Swagger API Documentation (Extended)](https://res.cloudinary.com/dkb1rdtmv/image/upload/v1744489471/V3-API-OPEN_lj4teh.pdf)
+- **Swagger API Docs (Closed)**: [V3 Swagger API Documentation (Closed)](https://res.cloudinary.com/dkb1rdtmv/image/upload/v1744489469/V3-API-ClOSED_tpxmvy.pdf)
 
 ---
 
-## Assumptions
+### Codebase and Repository
 
-### Usage Patterns:
+All codebase development was done using **Visual Studio Code (VS Code)**. The complete project is version-controlled via Git and hosted on GitHub. Please refer to the GitHub repository for source code, keeping in mind the branch structure:
 
-- Read operations (stock lookups) are more frequent than writes  
-- Inventory management primarily occurs during business hours  
-- Stock movements follow predictable patterns (e.g., bulk stock-in, gradual sales)  
+- **`main` branch**: Corresponds to **V1** — the simplest version with a monolithic structure.
+- **`v2` branch**: Contains **V2** — the multi-store platform with authentication.
+- **`v3` branch**: Contains **V3** — the distributed, enterprise-scale architecture.
 
-### Technical Environment:
-
-- Reliable network connectivity between system components  
-- Support for Docker containerization  
-- PostgreSQL capabilities for complex views and triggers  
-- Sufficient hardware resources for the expected load  
-
-### Business Rules:
-
-- Products have unique SKUs across all stores  
-- Stock cannot go negative (sales limited by available stock)  
-- Stores operate independently but share product catalog  
-
-### Scaling Requirements:
-
-- V1: Single store with moderate transaction volume  
-- V2: Up to 500 stores with shared product catalog  
-- V3: 1000+ stores with high concurrency requirements  
-
-### Security Requirements:
-
-- Role-based access control is sufficient for authorization  
-- JWT provides adequate security for authentication  
-- Store managers should only access their assigned stores  
+> The repository is already attached for review. Please follow the respective branches to inspect the corresponding version implementation.
 
 ---
 
-## API Design
+### API Documentation
 
-The API follows RESTful principles with a consistent design pattern. All responses use a standard format:
-
-### Core Endpoints
-
-#### Product Management
-
-- `GET /api/products` - Retrieve all products  
-- `GET /api/products/:id` - Retrieve a specific product  
-- `POST /api/products` - Add a new product  
-- `PUT /api/products/:id` - Update a product  
-- `DELETE /api/products/:id` - Delete a product  
-
-#### Inventory Management
-
-- `POST /api/stock/add` - Record stock-in movement  
-- `POST /api/stock/sale` - Record sales movement  
-- `POST /api/stock/remove` - Record manual removal  
-- `GET /api/stock/current` - Get current inventory levels  
-- `GET /api/stock/movements` - Get stock movement history  
-
-#### Store Management (V2+)
-
-- `GET /api/stores` - Retrieve all stores  
-- `POST /api/stores` - Add a new store  
-- `GET /api/stores/:id/inventory` - Get inventory for specific store  
-
-#### Authentication (V2+)
-
-- `POST /api/auth/register` - Register a new user  
-- `POST /api/auth/login` - Authenticate and receive tokens  
-- `GET /api/auth/profile` - Get authenticated user profile  
-
-#### Inventory Events (V3)
-
-- `GET /api/inventory/events` - Retrieve inventory events  
-- `GET /api/inventory/alerts` - Retrieve inventory alerts  
+API endpoint documentation for each version is already hosted and well-organized. You may follow the respective links to explore and test the APIs in detail.
 
 ---
 
-## API Evolution
-
-- **V1**: Basic CRUD operations for products and stock movements.  
-- **V2**: Added authentication, store-specific endpoints, and filtering.  
-- **V3**: Enhanced with caching headers, rate limit information, and asynchronous operation support.  
-
----
-
-## Evolution Rationale (V1 → V3)
-
-### Version 1: Single Store
-
-**Focus Areas:**
-
-- Core inventory tracking functionality  
-- Product catalog management  
-- Basic stock movement recording and reporting  
-
-**Technical Implementation:**
-
-- Simple monolithic application  
-- Direct database queries  
-- Real-time stock calculation via SQL view  
-- No authentication or authorization  
-
-**Key Design Patterns:**
-
-- Repository pattern for data access  
-- Event sourcing for inventory movements  
-- MVC architecture for API endpoints  
-
-**Limitations:**
-
-- Limited to single-store operations  
-- No user authentication or roles  
-- Synchronous processing only  
-- Limited scalability under high load  
-
----
-
-### Version 2: Multi-Store (500+ Stores)
-
-**Focus Areas:**
-
-- Multi-store inventory tracking  
-- User authentication and authorization  
-- Store-specific operations  
-- Enhanced reporting with filtering  
-
-**Technical Implementation:**
-
-- Enhanced monolithic application  
-- JWT-based authentication  
-- Role-based access control  
-- Basic rate limiting  
-- Store-specific database queries  
-
-**Key Design Patterns:**
-
-- Repository pattern with store context  
-- Strategy pattern for authorization  
-- Observer pattern for logging  
-- Chain of responsibility for request handling  
-
-**Enhancements from V1:**
-
-- Added `stores` table for multi-store operations  
-- Modified `stock_movements` to include `store_id`  
-- Added `users` and `user_roles` tables  
-- Implemented authentication middleware  
-- Enhanced controllers to enforce store-specific access  
-
-**Limitations:**
-
-- Limited horizontal scalability  
-- Direct database calculations without caching  
-- Synchronous processing for all operations  
-
----
-
-### Version 3: Scalable System (1000+ Stores)
-
-**Focus Areas:**
-
-- Horizontal scalability for thousands of stores  
-- Near real-time inventory updates  
-- High concurrency support  
-- Comprehensive audit logging  
-
-**Technical Implementation:**
-
-- Distributed system with stateless services  
-- Event-driven architecture with RabbitMQ  
-- Redis caching and rate limiting  
-- Read/write separation with connection pools  
-- Docker containerization with Nginx load balancing  
-
-**Key Design Patterns:**
-
-- Event sourcing for inventory changes  
-- CQRS for read/write separation  
-- Publisher-subscriber for asynchronous processing  
-- Circuit breaker for resilience  
-- Cache-aside pattern for performance  
-
-**Enhancements from V2:**
-
-- Added RabbitMQ for asynchronous event processing  
-- Implemented Redis caching for frequently accessed data  
-- Added distributed rate limiting  
-- Enhanced audit logging with database triggers  
-- Implemented read/write separation  
-
-**Technical Components Added:**
-
-- Message producers and consumers for event handling  
-- Connection pool management for database optimization  
-- Cache management service  
-- Health check endpoints for load balancing  
-- Circuit breakers for failure handling  
-
----
-
-## Technical Architecture
-
----
-
-## Database Schema Evolution
-
-### V1: Foundation
-
-- `products` table for product catalog  
-- `stock_movements` table for inventory changes  
-- `current_inventory` view for real-time calculations  
-- SQL triggers for timestamp management  
-
-### V2: Multi-Store Extension
-
-- `stores` table for store information  
-- `users` table for authentication  
-- `user_roles` table for authorization  
-- Extended `stock_movements` with store reference  
-- Enhanced indexing for multi-store queries  
-
-### V3: Distributed System
-
-- `inventory_events` table for event sourcing  
-- `inventory_alerts` table for stock notifications  
-- `audit_logs` table for system-wide auditing  
-- Table partitioning for improved performance  
-- Comprehensive database triggers for auditing  
-
----
-
-## Middleware Implementation
-
-### V1: Basic Middleware
-
-- Error handling middleware  
-- Request logging middleware  
-- Express JSON parsing  
-
-### V2: Enhanced Middleware
-
-- JWT authentication middleware  
-- Role-based authorization middleware  
-- Request validation middleware  
-- Basic rate limiting middleware  
-
-### V3: Advanced Middleware
-
-- Distributed rate limiting with Redis  
-- Circuit breaker middleware  
-- Caching middleware  
-- Request context middleware  
-- Health check middleware  
-
----
-
-## System Components
-
-### V1: Core Components
-
-- Express.js application server  
-- PostgreSQL database  
-- Product and Stock controllers  
-- Database service  
-
-### V2: Enhanced Components
-
-- Authentication service  
-- Authorization service  
-- Store management service  
-- Enhanced reporting service  
-
-### V3: Distributed Components
-
-- Message producer service  
-- Message consumer service  
-- Cache management service  
-- Inventory event handler service  
-- Audit logging service  
-- Health monitoring service  
-
----
-
-## Trade-offs and Considerations
-
-### Event Sourcing vs. State-Based Storage
-
-**Trade-off:** Using event sourcing for inventory provides complete auditability but increases query complexity.  
-**Consideration:** We chose event sourcing because the benefits of complete traceability and data integrity outweigh the performance cost, which can be mitigated through caching and optimized views.
-
-### Monolithic vs. Distributed Architecture
-
-**Trade-off:** Moving from a monolith to a distributed system increases scalability but adds complexity.  
-**Consideration:** The V3 distributed architecture was necessary to handle thousands of stores with high concurrency, though it requires more sophisticated monitoring and deployment strategies.
-
-### Synchronous vs. Asynchronous Processing
-
-**Trade-off:** Asynchronous processing improves responsiveness but makes system state more complex.  
-**Consideration:** V3 implements asynchronous processing for non-critical operations, balancing immediate consistency needs with system responsiveness.
-
-### Database Design Decisions
-
-**Trade-off:** Using PostgreSQL views for real-time calculations vs. materialized views or direct storage.  
-**Consideration:** Standard views were chosen initially for strict consistency, but V3 adds caching for performance while maintaining eventual consistency.
-
-### Security vs. Usability
-
-**Trade-off:** Strict security measures can impact user experience and development speed.  
-**Consideration:** The authentication system balances security needs with usability through JWT tokens with reasonable expiration times and refresh token capabilities.
-
----
-
-This documentation provides a comprehensive overview of the BazaarCSTD inventory tracking system's design, assumptions, API structure, and evolution across three versions. The system demonstrates progressive enhancement from a single-store solution to a highly scalable, distributed platform capable of supporting thousands of stores with near real-time inventory tracking.
+# BazaarCSTD Technical Evolution: From Single Store to Enterprise Scale
+
+## Executive Summary
+
+This document summarizes the technical evolution of BazaarCSTD, an inventory tracking system that transformed from a single-store solution to an enterprise-grade platform supporting 1000+ stores. The system evolved through three major versions, each addressing specific scalability challenges while enhancing functionality and performance.
+
+## System Evolution Overview
+
+### V1: Single-Store Solution
+- **Architecture**: Monolithic Node.js/Express.js with PostgreSQL
+- **Core Feature**: Event-sourced inventory tracking for complete audit trail
+- **Target Scale**: Single Kiryana store operations
+
+### V2: Multi-Store Platform (500+ Stores)
+- **Architecture**: Enhanced monolith with multi-tenant data model
+- **Key Additions**: Authentication, authorization, and store-specific operations
+- **Target Scale**: Network of 500+ stores with role-based access
+
+### V3: Distributed Enterprise System (1000+ Stores)
+- **Architecture**: Horizontally scaled microservices with event-driven design
+- **Advanced Features**: Caching, message queuing, and read/write separation
+- **Target Scale**: Enterprise deployment for 1000+ stores with high concurrency
+
+## Technical Architecture Details
+
+### Version 1: Foundation
+
+#### Core Architecture
+- Monolithic Node.js/Express.js backend
+- PostgreSQL database with direct connection
+- RESTful API endpoints for inventory operations
+
+#### Key Technical Components
+- **Event-Sourced Database Design**
+  - Products table for catalog information
+  - Stock movements table tracking all inventory changes
+  - Real-time calculated inventory view through SQL aggregation
+- **Controller Structure**
+  - Product controller: CRUD operations for product catalog
+  - Stock controller: Manages inventory movements with validation
+
+#### Request Flow
+- Client request → Express middleware → Controller → Database → Response
+
+#### Technical Implementation
+- SQL transactions for data integrity
+- Server-side input validation
+- Standardized error responses
+- PostgreSQL views for inventory calculations
+
+#### Limitations
+- Single-store scope
+- No authentication/authorization
+- Limited performance optimization
+- Basic concurrency handling
+
+### Version 2: Multi-Store Expansion
+
+#### Architecture Evolution
+- Maintained monolithic structure with expanded data model
+- Added JWT-based authentication system
+- Implemented role-based access control
+- Added basic request throttling
+
+#### Key Technical Components
+- **Extended Database Schema**
+  - Stores table for multi-tenant operations
+  - Users and roles tables for authentication
+  - Store-specific stock movement tracking
+- **Authentication System**
+  - Secure password storage with bcrypt
+  - JWT token generation with expiration
+  - Refresh token mechanism
+- **Authorization Framework**
+  - Role hierarchy: ADMIN > STORE_MANAGER > STAFF
+  - Permission checking middleware
+  - Store-specific access controls
+
+#### Multi-Store Features
+- Store-scoped inventory operations
+- Cross-store inventory comparison
+- Enhanced reporting with store filtering
+
+#### Technical Implementation
+- Store context for data isolation
+- Authentication middleware pipeline
+- Indexed queries for store-specific lookups
+- Extended error handling
+
+#### Limitations
+- Limited horizontal scaling
+- No caching mechanisms
+- Potential concurrency bottlenecks
+- Single point of failure
+
+### Version 3: Enterprise Transformation
+
+#### Architecture Transformation
+- Horizontally scaled application nodes
+- Event-driven architecture with message broker
+- Read/write database separation
+- Redis caching layer
+- Comprehensive audit system
+
+#### Key Technical Components
+- **Horizontal Scaling Infrastructure**
+  - Nginx load balancer for request distribution
+  - Docker containerization
+  - Health monitoring
+  - Optimized connection pooling
+- **Event-Driven Architecture**
+  - RabbitMQ message broker with topic exchanges
+  - Producer-consumer pattern for inventory events
+  - Dead letter queues for failed messages
+- **Database Optimization**
+  - Dedicated read/write connection pools
+  - Strategic indexing and table partitioning
+  - Transaction support for complex operations
+- **Caching Implementation**
+  - Redis for product and inventory caching
+  - Distributed rate limiting
+  - Cache invalidation strategies
+- **Audit Logging System**
+  - Database triggers for change tracking
+  - Comprehensive metadata capture
+  - Indexed audit trail
+
+#### Technical Implementation Details
+- Asynchronous event processing for inventory changes
+- Redis-based distributed rate limiting
+- Multi-layered caching strategy
+- Time-based database partitioning
+
+## Technical Evolution Analysis
+
+### Database Evolution
+- **V1**: Event-sourced single-store schema
+- **V2**: Multi-tenant schema with authentication
+- **V3**: Partitioned, indexed, and audited distributed database
+
+### API Design Evolution
+- **V1**: Basic RESTful endpoints
+- **V2**: Authenticated store-specific endpoints
+- **V3**: Cached, rate-limited API with asynchronous operations
+
+### Business Logic Evolution
+- **V1**: Synchronous inventory operations
+- **V2**: Role-based, store-specific operations
+- **V3**: Event-driven, decoupled processing
+
+### Infrastructure Evolution
+- **V1**: Single application instance
+- **V2**: Enhanced monolith with authentication
+- **V3**: Distributed system with message broker and caching
+
+## Key Design Decisions and Trade-offs
+
+### Event Sourcing for Inventory
+- **Benefits**: Complete audit trail, point-in-time reconstruction, simplified concurrency
+- **Trade-offs**: Higher storage requirements, complex queries, increased processing
+
+### Asynchronous Processing
+- **Benefits**: Improved responsiveness, system resilience, independent scaling
+- **Trade-offs**: Increased complexity, eventual consistency, debugging challenges
+
+### Read/Write Separation
+- **Benefits**: Optimized database usage, read replica support, better read performance
+- **Trade-offs**: Potential consistency issues, complex connection management
+
+### Caching Strategy
+- **Benefits**: Reduced database load, improved response times, distributed rate limiting
+- **Trade-offs**: Cache invalidation complexity, additional infrastructure, stale data risk
+
+## Conclusion
+
+The BazaarCSTD system evolution demonstrates a methodical approach to scaling an inventory system from a single store to an enterprise platform supporting thousands of locations. Each version built upon the previous foundation while addressing its limitations:
+- **V1** established core inventory tracking with event sourcing
+- **V2** enabled multi-store operations with proper security controls
+- **V3** delivered a scalable, distributed architecture with modern design patterns
+
+This progressive evolution ensured business continuity while enabling the system to meet increasing demands for performance, reliability, and scale.
